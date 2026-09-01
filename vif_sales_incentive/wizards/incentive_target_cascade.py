@@ -300,13 +300,6 @@ class IncentiveTargetCascade(models.Model):
         self.preview_line_ids.unlink()
         self.carry_forward_total = sum(
             self._preview_branch(bt) for bt in self._branch_targets())
-        return {
-            'type': 'ir.actions.act_window',
-            'res_model': self._name,
-            'res_id': self.id,
-            'view_mode': 'form',
-            'target': 'new',
-        }
 
     def action_apply(self):
         self.ensure_one()
@@ -373,7 +366,7 @@ class IncentiveTargetCascade(models.Model):
                 self.preview_line_ids
                 .filtered(lambda l: l.branch_target_id == bt)
                 .mapped('carry_forward_amount'))
-        return {'type': 'ir.actions.act_window_close'}
+        return True
 
 
 class IncentiveTargetCascadeLine(models.Model):
