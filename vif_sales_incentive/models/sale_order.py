@@ -7,3 +7,4 @@ class SaleOrder(models.Model):
 
     customer_reference = fields.Char(string='Customer Reference')
     employee_id = fields.Char(string='Employee')
+    percentage_deal = fields.Float(string='Percentage Deal')

@@ -8,6 +8,7 @@
             <field name="partner_shipping_id" position="after">
                 <field name="customer_reference"/>
                 <field name="employee_id"/>
+                <field name="percentage_deal"/>
             </field>
         </field>
     </record>
