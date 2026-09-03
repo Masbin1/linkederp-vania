@@ -58,6 +58,7 @@ Implements the incentive scheme defined in the client's Scenario Matrix:
         'views/incentive_refund_policy_views.xml',
         'views/hr_employee_views.xml',
         'views/account_move_views.xml',
+        'views/sale_order_views.xml',
         'wizards/incentive_target_cascade_views.xml',
         'wizards/incentive_transaction_refund_views.xml',
         'views/incentive_menus.xml',

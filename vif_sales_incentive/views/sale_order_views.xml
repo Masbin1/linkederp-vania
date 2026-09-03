@@ -9,7 +9,13 @@
                 <field name="customer_reference"/>
                 <field name="employee_id"/>
                 <field name="percentage_deal"/>
+                <field name="revision_number" readonly="1"/>
+                <field name="revision_parent_id" readonly="1"/>
             </field>
+            <xpath expr="//header" position="inside">
+                <button name="action_create_revision" type="object"
+                        string="Create Revision" class="btn-secondary"/>
+            </xpath>
         </field>
     </record>
 </odoo>
