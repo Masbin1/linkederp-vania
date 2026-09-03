@@ -12,3 +12,4 @@ from . import incentive_payout
 from . import hr_employee
 from . import account_move
 from . import sale_order
+from . import res_config_settings
