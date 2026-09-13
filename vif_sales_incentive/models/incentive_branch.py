@@ -34,6 +34,14 @@ class IncentiveBranch(models.Model):
              "denominator, so its slice goes to the bonus pool instead of "
              "inflating the target of everyone who stayed. 0 disables that.")
 
+    effective_fte_b2b = fields.Float(
+        string='FTE B2B', digits=(16, 2),
+        compute='_compute_effective_fte_display',
+        help="Today's weighted headcount of the B2B team in this branch.")
+    effective_fte_b2c = fields.Float(
+        string='FTE B2C', digits=(16, 2),
+        compute='_compute_effective_fte_display',
+        help="Today's weighted headcount of the B2C team in this branch.")
     effective_fte = fields.Float(
         string='Effective FTE', digits=(16, 2),
         compute='_compute_effective_fte_display',
@@ -58,15 +66,16 @@ class IncentiveBranch(models.Model):
                  'employee_ids.incentive_date_end',
                  'employee_ids.is_vacant_slot')
     def _compute_effective_fte_display(self):
-        """Today's actual FTE, for the form only -- nothing computes off it.
+        """Today's actual FTE per business type, for the form only.
 
         The cascade never reads this: it builds its own population per branch x
         business type (``_collect_population``) for the period being cascaded,
         not for today.
         """
         for branch in self:
-            branch.effective_fte = sum(
-                branch._compute_effective_fte(bt) for bt in ('b2b', 'b2c'))
+            branch.effective_fte_b2b = branch._compute_effective_fte('b2b')
+            branch.effective_fte_b2c = branch._compute_effective_fte('b2c')
+            branch.effective_fte = branch.effective_fte_b2b + branch.effective_fte_b2c
 
     # ------------------------------------------------------------------
     # Team population -- one definition, used by the cascade and by the

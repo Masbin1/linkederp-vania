@@ -132,13 +132,18 @@ class TestIdealTeamSize(TransactionCase):
 
     def test_effective_fte_reads_the_live_population(self):
         """The form's actual-vs-ideal figure, computed not typed."""
+        self.assertAlmostEqual(self.branch.effective_fte_b2b, 4.5, 2)
+        self.assertAlmostEqual(self.branch.effective_fte_b2c, 0.0, 2)
         self.assertAlmostEqual(self.branch.effective_fte, 4.5, 2)
         self.env['hr.employee'].create({
             'name': 'I B2C FTE', 'incentive_branch_id': self.branch.id,
             'incentive_business_type': 'b2c',
             'incentive_designation_id': self.team_desig.id,
         })
-        self.branch.invalidate_recordset(['effective_fte'])
+        self.branch.invalidate_recordset([
+            'effective_fte', 'effective_fte_b2b', 'effective_fte_b2c'])
+        self.assertAlmostEqual(self.branch.effective_fte_b2b, 4.5, 2)
+        self.assertAlmostEqual(self.branch.effective_fte_b2c, 1.0, 2)
         self.assertAlmostEqual(self.branch.effective_fte, 5.5, 2)
 
     # ------------------------------------------------------------------

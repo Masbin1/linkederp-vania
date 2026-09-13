@@ -11,7 +11,8 @@
                 <field name="manager_id"/>
                 <field name="ideal_team_size"/>
                 <field name="employee_count"/>
-                <field name="effective_fte"/>
+                <field name="effective_fte_b2b"/>
+                <field name="effective_fte_b2c"/>
                 <field name="company_id" groups="base.group_multi_company"/>
             </list>
         </field>
@@ -31,7 +32,8 @@
                             <field name="code"/>
                             <field name="manager_id"/>
                             <field name="ideal_team_size"/>
-                            <field name="effective_fte"/>
+                            <field name="effective_fte_b2b"/>
+                            <field name="effective_fte_b2c"/>
                         </group>
                         <group>
                             <field name="company_id" groups="base.group_multi_company"/>
