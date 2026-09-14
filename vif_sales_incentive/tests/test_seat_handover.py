@@ -30,7 +30,7 @@ class TestSeatHandover(TransactionCase):
 
         cls.branch = cls.env['incentive.branch'].create(
             {'name': 'Test Handover', 'code': 'TSHO',
-             'company_id': cls.company.id, 'ideal_team_size': 4})
+             'company_id': cls.company.id, 'ideal_team_size_b2b': 4})
 
         # Ideal 4: 1 Lead (1.5 FTE) + 3 Team (1.0 each). Member 3 is the seat
         # that changes hands.

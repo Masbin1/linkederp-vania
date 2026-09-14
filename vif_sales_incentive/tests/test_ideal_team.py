@@ -26,7 +26,7 @@ class TestIdealTeamSize(TransactionCase):
         # Ideal 5, but only 4 records exist: 1 Lead (1.5) + 3 Team (1.0 each).
         cls.branch = cls.env['incentive.branch'].create({
             'name': 'Test Ideal', 'code': 'TSTI',
-            'company_id': cls.company.id, 'ideal_team_size': 5,
+            'company_id': cls.company.id, 'ideal_team_size_b2b': 5,
         })
         cls.lead, cls.m1, cls.m2, cls.m3 = cls.env['hr.employee'].create([
             {'name': 'I Lead', 'incentive_branch_id': cls.branch.id,
@@ -110,7 +110,7 @@ class TestIdealTeamSize(TransactionCase):
 
     def test_zero_ideal_keeps_the_old_denominator(self):
         """An unset ideal must not change a single existing figure."""
-        self.branch.ideal_team_size = 0
+        self.branch.ideal_team_size_b2b = 0
         self._cascade(4_500_000.0)
         self.assertAlmostEqual(self._target(self.m1).amount, 1_000_000.0, 2)
         self.assertFalse(self._target(self.m1, 'bonus'))

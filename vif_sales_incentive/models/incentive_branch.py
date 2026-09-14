@@ -25,14 +25,18 @@ class IncentiveBranch(models.Model):
     employee_ids = fields.One2many('hr.employee', 'incentive_branch_id', string='Sales Team')
     employee_count = fields.Integer(compute='_compute_employee_count')
 
-    ideal_team_size = fields.Integer(
-        string='Ideal Team Size',
-        help="Headcount one team of this branch is meant to have, lead "
-             "included. Applied to the B2B and the B2C team separately -- each "
-             "population is still counted on its own.\n"
-             "A seat short of this number keeps weighing on the cascade "
-             "denominator, so its slice goes to the bonus pool instead of "
-             "inflating the target of everyone who stayed. 0 disables that.")
+    ideal_team_size_b2b = fields.Integer(
+        string='Ideal B2B Size',
+        help="Headcount the B2B team of this branch is meant to have, lead "
+             "included. A seat short of this number keeps weighing on the "
+             "cascade denominator, so its slice goes to the bonus pool instead "
+             "of inflating the target of everyone who stayed. 0 disables that.")
+    ideal_team_size_b2c = fields.Integer(
+        string='Ideal B2C Size',
+        help="Headcount the B2C team of this branch is meant to have, lead "
+             "included. A seat short of this number keeps weighing on the "
+             "cascade denominator, so its slice goes to the bonus pool instead "
+             "of inflating the target of everyone who stayed. 0 disables that.")
 
     effective_fte_b2b = fields.Float(
         string='FTE B2B', digits=(16, 2),
@@ -51,8 +55,10 @@ class IncentiveBranch(models.Model):
     _sql_constraints = [
         ('code_company_uniq', 'unique(code, company_id)',
          'Branch code must be unique per company.'),
-        ('ideal_team_size_positive', 'CHECK(ideal_team_size >= 0)',
-         'Ideal team size cannot be negative.'),
+        ('ideal_team_size_b2b_positive', 'CHECK(ideal_team_size_b2b >= 0)',
+         'Ideal B2B team size cannot be negative.'),
+        ('ideal_team_size_b2c_positive', 'CHECK(ideal_team_size_b2c >= 0)',
+         'Ideal B2C team size cannot be negative.'),
     ]
 
     @api.depends('employee_ids')
@@ -94,9 +100,11 @@ class IncentiveBranch(models.Model):
     def _headcount_gap(self, business_type):
         """Seats the ideal calls for that no record fills at all."""
         self.ensure_one()
-        if not self.ideal_team_size:
+        ideal = (self.ideal_team_size_b2b if business_type == 'b2b'
+                 else self.ideal_team_size_b2c)
+        if not ideal:
             return 0
-        return max(0, self.ideal_team_size - len(self._team_employees(business_type)))
+        return max(0, ideal - len(self._team_employees(business_type)))
 
     def _compute_effective_fte(self, business_type, scope='branch', date_ref=None):
         """Sum of effective FTE for the active population of this branch.

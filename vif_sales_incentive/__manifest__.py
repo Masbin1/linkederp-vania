@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'VIF Sales Incentive',
-    'version': '19.0.1.0.0',
+    'version': '19.0.1.1.0',
     'category': 'Sales/Sales',
     'summary': 'Tier-based sales incentive engine with FTE target cascade, '
                'payment-based payout and multi-period iteration',
