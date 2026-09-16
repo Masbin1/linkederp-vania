@@ -167,22 +167,53 @@ _plain = 700_000 * rate(get_tier(700_000 / 428_571.43, False))
 assert _mixed >= _plain, (_mixed, _plain)
 print("split checks: 9/9 passed")
 
-# ---- Branch stream (0.75%) self-check -------------------------------
-def branch_pool(branch_target, net, paid, weights):
-    """Pool = paid x base_rate x tier_allocation; split by FTE weight."""
-    ach = net / branch_target if branch_target else 0.0
-    tier = get_tier(ach)          # branch never caps tier 5 (S18 is individual-only)
-    pool = paid * rate(tier)
-    total = sum(weights) or 0.0
-    return pool, [pool * (w / total) if total else 0.0 for w in weights]
+# ---- Branch stream self-check ----------------------------------------
+def branch_payout_pool(branch_target, branch_net, payout_currents, ftes):
+    """Pool model: pool = sum(payout_current), split by FTE, x branch rate.
 
-pool, shares = branch_pool(100*M, 100*M, 90*M, [1.5, 1.0, 0.25])
-# Tier 4 (ach 100%) -> rate 0.0075; pool = 90M * 0.0075 = 675,000
-assert round(pool) == 675_000, pool
-assert round(sum(shares)) == round(pool)
-assert round(shares[0]) == round(pool * 1.5 / 2.75)
-assert round(shares[2]) == round(pool * 0.25 / 2.75)
-print("branch stream checks: 4/4 passed")
+    branch_payout[i] = pool x (fte[i] / total_fte) x branch_rate
+    """
+    ach = branch_net / branch_target if branch_target else 0.0
+    tier = get_tier(ach)
+    r = rate(tier)
+    pool = sum(payout_currents)
+    total_fte = sum(ftes)
+    return [pool * (f / total_fte) * r for f in ftes] if total_fte else [0] * len(ftes)
+
+# IKA scenario: only IKA sold, payout_current = 16,985,000
+# Team: Lead 1.5 + 4 x Team 1.0 = 5.5 FTE, branch tier 1 (rate 0.003)
+ftes = [1.5, 1.0, 1.0, 1.0, 1.0]
+ika_pool = [16_985_000, 0, 0, 0, 0]
+payouts = branch_payout_pool(100*M, 76.09*M, ika_pool, ftes)
+pool = 16_985_000
+assert round(payouts[0]) == round(pool * (1.5 / 5.5) * 0.003), payouts[0]
+assert round(payouts[1]) == round(pool * (1.0 / 5.5) * 0.003), payouts[1]
+assert round(sum(payouts)) == round(pool * 0.003), sum(payouts)
+
+# Team of 3: only emp A sold. Pool = A's payout_current only.
+payouts3 = branch_payout_pool(100*M, 100*M, [750_000, 0, 0], [1.5, 1.0, 1.0])
+# pool = 750k, total_fte = 3.5, tier 4 rate = 0.0075
+assert round(payouts3[0]) == round(750_000 * (1.5/3.5) * 0.0075), payouts3[0]
+assert round(payouts3[1]) == round(750_000 * (1.0/3.5) * 0.0075), payouts3[1]
+assert payouts3[1] == payouts3[2]
+# Everyone sold equally: pool is shared back proportionally
+payouts_eq = branch_payout_pool(100*M, 100*M, [300_000, 200_000, 200_000], [1.5, 1.0, 1.0])
+assert round(sum(payouts_eq)) == round(700_000 * 0.0075), sum(payouts_eq)
+print("branch stream checks: 6/6 passed")
+
+# ---- Global branch member (Kenny) self-check -------------------------
+# Kenny participates in every branch with FTE 1.5 but payout_current = 0.
+# He increases the FTE denominator and takes a share, reducing regular team's share.
+ftes_kenny = [1.5, 1.0, 1.0, 1.0, 1.0, 1.5]  # last 1.5 is Kenny
+pool_kenny = [16_985_000, 0, 0, 0, 0, 0]       # Kenny contributes 0
+payouts_k = branch_payout_pool(100*M, 76.09*M, pool_kenny, ftes_kenny)
+total_fte_k = sum(ftes_kenny)  # 7.0
+assert total_fte_k == 7.0
+assert round(payouts_k[0]) == round(16_985_000 * (1.5 / 7.0) * 0.003), payouts_k[0]
+assert round(payouts_k[5]) == round(16_985_000 * (1.5 / 7.0) * 0.003), payouts_k[5]
+assert payouts_k[0] == payouts_k[5], "Lead and Kenny have same FTE, same share"
+assert round(sum(payouts_k)) == round(16_985_000 * 0.003), sum(payouts_k)
+print("global branch member (Kenny) checks: 4/4 passed")
 
 # ---- Tier is INVOICED, payout is COLLECTED --------------------------
 # The team invoiced its full July target but only collected half. Achievement
@@ -219,39 +250,49 @@ assert _AUG['tier'] == 0, "August invoiced nothing, so its OWN tier is 0"
 assert round(_JULY['total'] + _AUG['total']) == round(2*M * _JULY['rate']) == 15_000
 print("tier-vs-payment checks: 7/7 passed")
 
-# ---- Down payment exclusion -----------------------------------------
-def incentive_lines(move_lines):
-    """What the engine keeps: product lines that are NOT down payments.
+# ---- Down payment: tier vs payout ------------------------------------
+def tier_lines(move_lines):
+    """What SQ1 keeps (achievement/tier): every product line, DP included.
 
     Mirrors the domain in _generate_for_period. ``move_lines`` is
     (display_type, is_downpayment, price_subtotal).
     """
+    return [amt for dtype, is_dp, amt in move_lines if dtype == 'product']
+
+def payout_lines(move_lines):
+    """What SQ2/SQ3 pay on: real product lines only, never a DP line."""
     return [amt for dtype, is_dp, amt in move_lines
             if dtype == 'product' and not is_dp]
 
-# 100M order, 30% down payment. Odoo builds three product lines across two
-# invoices; only the real one may earn incentive.
-DP_INVOICE = [('product', True, 30*M)]                  # month 10, paid
+# 100M order, 50% down payment. Odoo builds product lines across two invoices.
+DP_INVOICE = [('product', True, 50*M)]                  # month 8, fully paid
 FINAL_INVOICE = [('product', False, 100*M),             # the actual goods
-                 ('product', True, -30*M)]              # DP negation, qty -1
+                 ('product', True, -50*M)]              # DP negation, qty -1
 
-# Month 10: the DP invoice is fully paid but produces no incentive base.
-assert incentive_lines(DP_INVOICE) == [], \
-    "a paid down payment must not earn incentive on its own"
+# Month 8 (August): with 100M also invoiced, eligibility is 150M -> tier 5.
+# The DP is fully paid, but it is NOT a payout base on its own.
+assert tier_lines(DP_INVOICE) == [50*M], tier_lines(DP_INVOICE)
+assert payout_lines(DP_INVOICE) == [], payout_lines(DP_INVOICE)
+assert tier_lines(DP_INVOICE) + [100*M] == [50*M, 100*M], "August eligibility 150M"
 
-# Month 11: the final invoice is paid -- base is the FULL order value, once.
-assert sum(incentive_lines(FINAL_INVOICE)) == 100*M, \
-    "final invoice must be worth the full order value, not 70M and not 160M"
+# Month 9 (September): eligibility nets the DP negation back off (the order
+# contributes 50M this month), while the payout base is the FULL order value.
+assert sum(tier_lines(FINAL_INVOICE)) == 50*M, \
+    "settlement eligibility must be 50M, not 100M and not 150M"
+assert sum(payout_lines(FINAL_INVOICE)) == 100*M, \
+    "settlement payout base must be the full order value, not 50M"
+assert sum(payout_lines(DP_INVOICE + FINAL_INVOICE)) == 100*M, \
+    "over the whole order the payout base is 100M exactly once"
 
-# The bug this replaces: abs() flipped the -30M negation back to +30M, so the
-# same order was worth 160M and the down payment was counted twice.
-assert sum(abs(amt) for _, _, amt in DP_INVOICE + FINAL_INVOICE) == 160*M, \
+# The bug this replaces: abs() flipped the -50M negation back to +50M, so the
+# same order was worth 200M in payout.
+assert sum(abs(amt) for _, _, amt in DP_INVOICE + FINAL_INVOICE) == 200*M, \
     "sanity: this is the WRONG number the old abs() produced"
 
 # A credit note against the final invoice still nets off the real line only.
-assert incentive_lines([('product', False, 20*M), ('product', True, -30*M)]) \
+assert payout_lines([('product', False, 20*M), ('product', True, -30*M)]) \
     == [20*M], "credit note nets the product line, never the DP negation"
-print("down payment checks: 4/4 passed")
+print("down payment checks: 6/6 passed")
 
 # ---- Rolling-forecast carry-forward (per employee) -------------------
 def carry(shortfall, months_remaining):
@@ -275,3 +316,32 @@ assert carry(0, 5) == 0.0
 sep_carry = round(aditya + carry(108_571.43, 4), 2)
 assert sep_carry == 78_571.43
 print("rolling-forecast checks: passed")
+
+# ---- Flat-rate rule (Jan-Jun) ----------------------------------------
+FLAT_TIERS = [
+    (0, 0.00, 0.75, 0.00),   # < 75%: not eligible
+    (1, 0.75, None, 1.00),    # >= 75%: flat 100% allocation
+]
+BASE_RATE_FLAT = 0.0075
+
+def get_flat_tier(ach):
+    matched = FLAT_TIERS[0]
+    for t in FLAT_TIERS:
+        lo, hi = t[1], t[2]
+        if ach >= lo and (hi is None or ach < hi):
+            matched = t
+    return matched
+
+def flat_rate(tier):
+    return round(tier[3] * BASE_RATE_FLAT, 8)
+
+# 75% achievement under flat rate -> 0.75% (not 0.30% as in tiered)
+assert flat_rate(get_flat_tier(0.75)) == 0.0075
+assert flat_rate(get_flat_tier(0.85)) == 0.0075
+assert flat_rate(get_flat_tier(1.00)) == 0.0075
+assert flat_rate(get_flat_tier(1.10)) == 0.0075
+assert flat_rate(get_flat_tier(0.74)) == 0.0
+# Payout: 60M paid at 0.75% = 450,000 (same regardless of tier)
+assert round(60*M * flat_rate(get_flat_tier(0.80))) == 450_000
+assert round(60*M * flat_rate(get_flat_tier(1.00))) == 450_000
+print("flat-rate (1H) checks: passed")

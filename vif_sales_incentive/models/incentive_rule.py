@@ -104,7 +104,7 @@ class IncentiveRuleTier(models.Model):
     base_rate = fields.Float(related='rule_id.base_rate', readonly=True)
     payout_rate = fields.Float(
         string='Payout Rate', compute='_compute_payout_rate',
-        store=True, digits=(16, 4))
+        store=True, digits=(16, 6))
     note = fields.Char()
 
     @api.depends('allocation', 'rule_id.base_rate')

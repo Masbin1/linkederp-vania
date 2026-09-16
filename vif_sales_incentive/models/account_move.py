@@ -93,6 +93,10 @@ class AccountMove(models.Model):
             period = Period._get_period_for_date(
                 cn.invoice_date or fields.Date.context_today(cn),
                 cn.company_id)
+            if not period:
+                # No incentive period covers the credit note date -- there is
+                # nowhere to tag the reversal, so there is nothing to net off.
+                continue
             for line in cn.invoice_line_ids.filtered(
                     lambda l: l.display_type == 'product'
                     and not l.is_downpayment):

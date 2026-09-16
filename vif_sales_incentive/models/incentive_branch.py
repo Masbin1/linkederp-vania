@@ -87,24 +87,32 @@ class IncentiveBranch(models.Model):
     # Team population -- one definition, used by the cascade and by the
     # headcount constraint on hr.employee.
     # ------------------------------------------------------------------
-    def _team_employees(self, business_type):
+    def _team_employees(self, business_type, date_ref=None):
         """Every record filling a seat of this branch x business type.
 
         Vacant slots count: they are seats that were explicitly created, so
         counting them again as a gap would charge the same empty chair twice.
+
+        When ``date_ref`` is given, employees outside that date are excluded:
+        future hires do not occupy a seat yet, and past leavers no longer do.
         """
         self.ensure_one()
-        return self.employee_ids.filtered(
+        employees = self.employee_ids.filtered(
             lambda e: e.incentive_business_type == business_type)
+        if date_ref:
+            employees = employees.filtered(
+                lambda e: (not e.incentive_date_start or e.incentive_date_start <= date_ref)
+                and (not e.incentive_date_end or e.incentive_date_end >= date_ref))
+        return employees
 
-    def _headcount_gap(self, business_type):
+    def _headcount_gap(self, business_type, date_ref=None):
         """Seats the ideal calls for that no record fills at all."""
         self.ensure_one()
         ideal = (self.ideal_team_size_b2b if business_type == 'b2b'
                  else self.ideal_team_size_b2c)
         if not ideal:
             return 0
-        return max(0, ideal - len(self._team_employees(business_type)))
+        return max(0, ideal - len(self._team_employees(business_type, date_ref)))
 
     def _compute_effective_fte(self, business_type, scope='branch', date_ref=None):
         """Sum of effective FTE for the active population of this branch.

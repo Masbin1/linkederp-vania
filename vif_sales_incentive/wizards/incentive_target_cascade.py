@@ -105,12 +105,19 @@ class IncentiveTargetCascade(models.Model):
 
     def _collect_population(self, branch):
         self.ensure_one()
+        period_start = self.period_id.date_start
         employees = self.env['hr.employee'].search([
             ('incentive_branch_id', '=', branch.id),
             ('incentive_business_type', '=', self.business_type),
         ])
         active, vacant = [], []
         for emp in employees:
+            # Skip employees outside this period. A future hire must not count
+            # as a vacant seat in an earlier month.
+            if emp.incentive_date_end and emp.incentive_date_end < period_start:
+                continue
+            if emp.incentive_date_start and emp.incentive_date_start > self.period_id.date_end:
+                continue
             desig = emp.incentive_designation_id
             if not desig:
                 continue
@@ -230,7 +237,8 @@ class IncentiveTargetCascade(models.Model):
         # stable, and the unclaimed slice lands in the bonus pool instead.
         # ponytail: an empty seat weighs 1.0 (a Team member). Model a missing
         # LEAD as a vacant-slot record with the Lead designation to get 1.5.
-        gap_fte = float(branch._headcount_gap(self.business_type))
+        gap_fte = float(branch._headcount_gap(
+            self.business_type, date_ref=self.period_id.date_start))
         seats = self._seat_groups(active)
         # One FTE contribution per SEAT, not per employee -- a mid-month
         # handover is still a single position (see _seat_groups).

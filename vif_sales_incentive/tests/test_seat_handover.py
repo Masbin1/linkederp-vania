@@ -121,6 +121,26 @@ class TestSeatHandover(TransactionCase):
             [('period_id', '=', self.period.id)]).mapped('amount'))
         self.assertAlmostEqual(total, 4_500_000.0, delta=1.0)
 
+    def test_future_hire_does_not_count_as_vacant_before_start_month(self):
+        future = self.env['hr.employee'].create({
+            'name': 'H Future Hire', 'incentive_branch_id': self.branch.id,
+            'incentive_business_type': 'b2b',
+            'incentive_designation_id': self.m1.incentive_designation_id.id,
+            'incentive_date_start': fields.Date.to_date('2025-09-01'),
+        })
+        self.env['incentive.target.cascade'].create({
+            'period_id': self.period.id,
+            'branch_ids': [(6, 0, self.branch.ids)],
+            'business_type': 'b2b',
+        }).action_apply()
+
+        self.assertFalse(self._target(future))
+        self.assertFalse(self._target(future, 'bonus'))
+        self.assertAlmostEqual(self._target(self.lead).amount, 1_500_000.0, 2)
+        self.assertAlmostEqual(self._target(self.m1).amount, 1_000_000.0, 2)
+        self.assertFalse(self._target(self.lead, 'bonus'))
+        self.assertFalse(self._target(self.m1, 'bonus'))
+
     # ------------------------------------------------------------------
     # Gapped handover (resign 20 Aug, replacement 25 Aug -- 21st-24th empty)
     # ------------------------------------------------------------------

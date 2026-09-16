@@ -81,5 +81,43 @@
             <field name="note">0.7875% -- full incentive scenario only</field>
         </record>
 
+        <!-- ============================================================
+             1H FLAT-RATE RULE
+             For January-June periods: any achievement >= 75% gets the
+             full 0.75% rate (100% allocation). No tiered steps.
+             ============================================================ -->
+
+        <record id="rule_1h_2026" model="incentive.rule">
+            <field name="name">Incentive Scheme 1H 2026 (Flat Rate)</field>
+            <field name="date_from" eval="'2026-01-01'"/>
+            <field name="date_to" eval="'2026-06-30'"/>
+            <field name="base_rate">0.0075</field>
+            <field name="bonus_rate">0.01</field>
+            <field name="max_discount">35.0</field>
+            <field name="cap_tier_in_mixed" eval="True"/>
+            <field name="mixed_cap_tier_level">4</field>
+        </record>
+
+        <record id="tier_1h_0" model="incentive.rule.tier">
+            <field name="rule_id" ref="rule_1h_2026"/>
+            <field name="name">Tier 0</field>
+            <field name="level">0</field>
+            <field name="achievement_min">0.0</field>
+            <field name="achievement_max">0.75</field>
+            <field name="allocation">0.0</field>
+            <field name="note">Not eligible</field>
+        </record>
+
+        <record id="tier_1h_1" model="incentive.rule.tier">
+            <field name="rule_id" ref="rule_1h_2026"/>
+            <field name="name">Tier 1</field>
+            <field name="level">1</field>
+            <field name="achievement_min">0.75</field>
+            <field name="achievement_max">99.0</field>
+            <field name="is_top_tier" eval="True"/>
+            <field name="allocation">1.0</field>
+            <field name="note">Flat 0.750% -- Jan to Jun</field>
+        </record>
+
     </data>
 </odoo>

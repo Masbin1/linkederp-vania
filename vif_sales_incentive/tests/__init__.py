@@ -5,3 +5,4 @@ from . import test_ideal_team
 from . import test_seat_handover
 from . import test_refund_once
 from . import test_business_type_isolation
+from . import test_achievement_payment_base

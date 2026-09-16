@@ -19,6 +19,7 @@
                 <field name="payment_date" optional="hide"/>
                 <field name="is_prior_period" optional="show"/>
                 <field name="discount"/>
+                <field name="is_downpayment" optional="show" widget="boolean_toggle"/>
                 <field name="is_discount_eligible" widget="boolean_toggle"/>
                 <field name="is_payment_eligible" widget="boolean_toggle"/>
                 <field name="bucket"/>
@@ -66,6 +67,7 @@
                     <group>
                         <group string="Eligibility">
                             <field name="discount"/>
+                            <field name="is_downpayment"/>
                             <field name="is_discount_eligible"/>
                             <field name="is_payment_eligible"/>
                             <field name="bucket"/>

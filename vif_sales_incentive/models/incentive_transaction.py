@@ -84,6 +84,15 @@ class IncentiveTransaction(models.Model):
         help="Signed. Negative for credit notes.")
     discount = fields.Float(string='Discount (%)', digits=(16, 2))
 
+    is_downpayment = fields.Boolean(
+        string='Down Payment Line', default=False, index=True,
+        help="Odoo puts two down-payment product lines in play: the 'Down "
+             "payment of x%' line on the DP invoice, and its negation (qty -1) "
+             "on the final invoice. A DP line DOES count toward the period "
+             "achievement (it moves the tier) but NEVER toward the payout base "
+             "-- the order is released in full on the final invoice's real "
+             "product line when that invoice is paid.")
+
     # -- eligibility (SQ2) ---------------------------------------------
     is_discount_eligible = fields.Boolean(
         string='Discount Eligible', default=True,
@@ -199,14 +208,11 @@ class IncentiveTransaction(models.Model):
             ('move_id.invoice_date', '>=', period.date_start),
             ('move_id.invoice_date', '<=', period.date_end),
             ('display_type', '=', 'product'),
-            # Down payments never earn incentive on their own. Odoo puts TWO
-            # is_downpayment product lines in play: the "Down payment of x%"
-            # line on the DP invoice, and its negation (qty -1) on the final
-            # invoice. Dropping both leaves only the real product line, so a
-            # 100M order with a 30M DP is worth 100M -- counted once, in the
-            # month the FINAL invoice is fully paid, never in the month the DP
-            # was settled.
-            ('is_downpayment', '=', False),
+            # Down-payment lines are KEPT, flagged ``is_downpayment``. They
+            # move the month's achievement (tier) but never the payout base:
+            # a 100M order with a 50M DP shows +50M achievement in the DP
+            # month and 100M - 50M = +50M in the settlement month, while the
+            # payout waits for the final invoice's real product line (100M).
             ('company_id', '=', period.company_id.id),
         ])
 
@@ -228,8 +234,14 @@ class IncentiveTransaction(models.Model):
                 'company_id': line.company_id.id,
                 'source_period_id': period.id,
                 'transaction_type': 'refund' if is_refund else 'invoice',
-                'base_amount': sign * abs(line.price_subtotal),
+                # Keep the sign: a credit note line is positive but must
+                # count negative, and the DP negation on the final invoice
+                # (-50M) must net the DP month back off. Only then does a
+                # 100M order with a 50M DP contribute 50M + 50M across the
+                # two months instead of 50M + 150M.
+                'base_amount': sign * line.price_subtotal,
                 'discount': line.discount,
+                'is_downpayment': line.is_downpayment,
                 'is_discount_eligible': line.discount <= max_discount,
                 'eligibility_note': (
                     _('Line discount %.2f%% exceeds the %.2f%% cap.')
@@ -244,21 +256,6 @@ class IncentiveTransaction(models.Model):
                 created |= existing
             else:
                 created |= self.create(vals)
-
-        # Drop down-payment rows an earlier run created before they were
-        # excluded. _generate_for_period only creates and updates, so without
-        # this a stale +DP row keeps inflating the base forever. Rows already
-        # paid out are left alone -- history is never rewritten.
-        stale_dp = self.search([
-            ('company_id', '=', period.company_id.id),
-            ('source_period_id', '=', period.id),
-            ('move_line_id.is_downpayment', '=', True),
-            ('state', '!=', 'paid_out'),
-        ])
-        if stale_dp:
-            _logger.info('Incentive: removing %s stale down-payment rows in %s',
-                         len(stale_dp), period.name)
-            stale_dp.unlink()
 
         # Refresh payment stamps for THIS period's rows and for every older
         # row that is still waiting for payment (S08 / S09 multi-iteration).
@@ -285,6 +282,7 @@ class IncentiveTransaction(models.Model):
                 ('move_id', '=', src_move.id),
                 ('employee_id', '=', refund.employee_id.id),
                 ('transaction_type', '=', 'invoice'),
+                ('is_downpayment', '=', False),
             ], limit=1)
             if invoice_tx:
                 refund.reversal_of_id = invoice_tx.id
@@ -357,7 +355,8 @@ class IncentiveTransaction(models.Model):
     def _compute_payout(self, bonus_rate):
         """Payout = incentive portion x frozen tier rate + bonus portion x bonus rate."""
         for rec in self:
-            if not rec.is_discount_eligible or not rec.is_payment_eligible:
+            if (not rec.is_discount_eligible or not rec.is_payment_eligible
+                    or rec.is_downpayment):
                 rec.payout_amount = 0.0
                 continue
             inc_net, bon_net = rec._net_alloc()

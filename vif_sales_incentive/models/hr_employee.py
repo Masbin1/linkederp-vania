@@ -28,6 +28,13 @@ class HrEmployee(models.Model):
         help="Placeholder record for a headcount slot that is not filled. "
              "Its target is redistributed until a replacement joins.")
 
+    is_global_branch_member = fields.Boolean(
+        string='Global Branch Member',
+        help="When checked, this employee participates in the branch payout "
+             "of EVERY branch and EVERY business type with their designation's "
+             "branch FTE weight. They receive branch incentive only, never "
+             "individual incentive.")
+
     branch_incentive_eligible = fields.Boolean(
         compute='_compute_incentive_eligibility', store=True, readonly=False)
     individual_incentive_eligible = fields.Boolean(

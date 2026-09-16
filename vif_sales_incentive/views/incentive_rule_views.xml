@@ -37,7 +37,7 @@
                                     <field name="achievement_max" widget="percentage"/>
                                     <field name="is_top_tier" widget="boolean_toggle"/>
                                     <field name="allocation" widget="percentage"/>
-                                    <field name="payout_rate" widget="percentage"/>
+                                    <field name="payout_rate"/>
                                     <field name="note"/>
                                 </list>
                             </field>

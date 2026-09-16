@@ -13,6 +13,7 @@
                             <field name="incentive_business_type"/>
                             <field name="incentive_designation_id"/>
                             <field name="is_vacant_slot"/>
+                            <field name="is_global_branch_member"/>
                         </group>
                         <group string="Effective Dates">
                             <field name="incentive_date_start"/>

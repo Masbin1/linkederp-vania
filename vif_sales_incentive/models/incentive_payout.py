@@ -15,11 +15,15 @@ class IncentivePayout(models.Model):
     is most often implemented wrong):
 
       SQ1  Tier          = Net Sales of ALL invoices in the source period
-                           (including unpaid AND including lines with a
-                           discount above 35%) / incentive target.
-                           This ONLY selects the tier.
+                           (including unpaid, including down-payment lines,
+                           and including lines with a discount above 35%)
+                           / incentive target. This ONLY selects the tier.
 
-      SQ2  Eligible base = only the lines with discount <= 35%.
+      SQ2  Eligible base = only the lines with discount <= 35% AND not a
+                           down-payment line. A DP moves the tier of its
+                           month but is never paid out on its own; the full
+                           order is released on the final invoice's product
+                           line, which SQ2 does count.
 
       SQ3  Payout base   = of SQ2, only what is FULLY PAID, split into
                            "paid in current month" and "prior-period invoice
@@ -89,6 +93,10 @@ class IncentivePayout(models.Model):
         string='Incentive Payout Current Month', currency_field='currency_id')
     payout_prior = fields.Monetary(
         string='Incentive Payout Previous Month', currency_field='currency_id')
+    incentive_payout = fields.Monetary(
+        string='Incentive Payout', compute='_compute_incentive_payout',
+        store=True, currency_field='currency_id',
+        help="Prior + Current period incentive payout.")
     payout_bonus = fields.Monetary(string='Bonus Payout', currency_field='currency_id')
 
     # -- Branch stream (0.75%) -----------------------------------------
@@ -96,7 +104,11 @@ class IncentivePayout(models.Model):
         string='Branch Target', currency_field='currency_id',
         help="Branch net-sales target for this employee's branch x business "
              "type (denominator of the branch tier).")
-    branch_net_sales = fields.Monetary(currency_field='currency_id')
+    branch_net_sales = fields.Monetary(
+        currency_field='currency_id',
+        help="Everything the branch invoiced this period -- paid or not, "
+             "down-payment lines included. This is what the branch tier is "
+             "measured on.")
     branch_achievement_pct = fields.Float(
         string='Branch Achievement', digits=(16, 4))
     branch_tier_id = fields.Many2one('incentive.rule.tier', string='Branch Tier')
@@ -104,9 +116,14 @@ class IncentivePayout(models.Model):
         related='branch_tier_id.level', store=True, readonly=True)
     branch_payout_rate = fields.Float(digits=(16, 6))
     branch_eligible = fields.Monetary(
-        string='Branch Eligible Base', currency_field='currency_id')
+        string='Branch Eligible Base', currency_field='currency_id',
+        help="This employee's own invoiced achievement this period, DP lines "
+             "included. For display only -- it is not multiplied by the rate.")
     branch_paid = fields.Monetary(
-        string='Branch Paid Base', currency_field='currency_id')
+        string='Branch Paid Base', currency_field='currency_id',
+        help="This employee's own base that is FULLY PAID in this period, "
+             "down-payment lines excluded. This is what the branch payout is "
+             "multiplied on.")
     branch_pool = fields.Monetary(
         string='Branch Pool', currency_field='currency_id',
         help="Total branch pool = branch paid x branch rate. Split across the "
@@ -142,6 +159,11 @@ class IncentivePayout(models.Model):
         for rec in self:
             rec.target_total = rec.target_incentive + rec.target_bonus
             rec.is_mixed = bool(rec.target_bonus)
+
+    @api.depends('payout_current', 'payout_prior')
+    def _compute_incentive_payout(self):
+        for rec in self:
+            rec.incentive_payout = rec.payout_prior + rec.payout_current
 
     @api.depends('payout_current', 'payout_prior', 'payout_bonus', 'branch_payout',
                  'tier_id', 'branch_tier_id')
@@ -209,13 +231,14 @@ class IncentivePayout(models.Model):
 
     @api.model
     def _compute_branch_for_period(self, period, branch_target=None):
-        """BRANCH incentive stream (0.75%).
+        """BRANCH incentive stream.
 
-        For each branch x business type with a target this period: pool =
-        (fully-paid, discount-eligible net base) x (base_rate x branch tier
-        allocation). The pool is split across the branch's eligible team by
-        ``fte_branch x proration``. Each employee's share lands on their payout
-        row as ``branch_payout``.
+        Branch achievement and tier come from the branch-level aggregate.
+        The pool = sum of the team's ``payout_current`` (individual incentive
+        payout current month). That pool is split by FTE weight and multiplied
+        by the branch tier rate to give each employee's branch payout.
+
+        branch_payout[emp] = pool × (emp_fte / total_fte) × branch_rate
         """
         period.ensure_one()
         if period.state == 'locked':
@@ -225,9 +248,17 @@ class IncentivePayout(models.Model):
             return self.browse()
 
         Transaction = self.env['incentive.transaction']
+        Employee = self.env['hr.employee']
         results = self.browse()
         branch_targets = branch_target or self.env['incentive.branch.target'].search(
             [('period_id', '=', period.id)])
+
+        global_members = Employee.search([
+            ('is_global_branch_member', '=', True),
+            ('incentive_designation_id', '!=', False),
+        ])
+        global_accum = {}
+
         for bt in branch_targets:
             if bt._is_closed() and not branch_target:
                 continue
@@ -236,9 +267,8 @@ class IncentivePayout(models.Model):
                 lambda e: e.incentive_business_type == bt.business_type
                 and e.branch_incentive_eligible
                 and e._is_incentive_active_on(period.date_start))
-            if not employees:
-                continue
 
+            # Branch-level aggregates for achievement and tier
             tx = Transaction.search([
                 ('branch_id', '=', branch.id),
                 ('business_type', '=', bt.business_type),
@@ -251,31 +281,13 @@ class IncentivePayout(models.Model):
             net = gross - returns
 
             achievement = (net / bt.amount_total) if bt.amount_total else 0.0
-            # S18 caps only the INDIVIDUAL incentive bucket; the branch tier is
-            # always taken from the plain table.
             tier = rule._get_tier(achievement)
-
-            eligible_base = sum(
-                t.base_amount for t in tx
-                if t.is_discount_eligible and t.transaction_type == 'invoice')
-            paid = sum(
-                t._net_base() for t in tx
-                if t.is_discount_eligible and t.is_payment_eligible
-                and t.transaction_type == 'invoice')
-
             rate = tier.payout_rate if tier else 0.0
-            pool = paid * rate
 
-            weights = [
-                (emp, (emp.incentive_designation_id.fte_branch
-                       if emp.incentive_designation_id else 0.0)
-                 * emp._incentive_proration(period))
-                for emp in employees
-            ]
-            total_weight = sum(w for _, w in weights) or 0.0
-
-            for emp, weight in weights:
-                share = (weight / total_weight) if total_weight else 0.0
+            # Collect payout rows and FTE weights
+            team_data = []
+            team_emp_ids = set()
+            for emp in employees:
                 payout = self.search([
                     ('period_id', '=', period.id),
                     ('employee_id', '=', emp.id),
@@ -288,20 +300,68 @@ class IncentivePayout(models.Model):
                         'period_id': period.id,
                         'employee_id': emp.id,
                     })
-                payout.write({
-                    'branch_target': bt.amount_total,
-                    'branch_net_sales': net,
-                    'branch_achievement_pct': achievement,
-                    'branch_tier_id': tier.id if tier else False,
-                    'branch_payout_rate': rate,
-                    'branch_eligible': eligible_base,
-                    'branch_paid': paid,
-                    'branch_pool': pool,
-                    'branch_fte': weight,
-                    'branch_fte_share': share,
-                    'branch_payout': pool * share,
-                })
-                results |= payout
+                fte = (emp.incentive_designation_id.fte_branch
+                       if emp.incentive_designation_id else 0.0)
+                team_data.append((payout, emp, fte, False))
+                team_emp_ids.add(emp.id)
+
+            for emp in global_members:
+                if emp.id in team_emp_ids:
+                    continue
+                fte = emp.incentive_designation_id.fte_branch
+                if not fte:
+                    continue
+                payout = self.search([
+                    ('period_id', '=', period.id),
+                    ('employee_id', '=', emp.id),
+                ], limit=1)
+                if payout and payout.is_frozen:
+                    results |= payout
+                    continue
+                if not payout:
+                    payout = self.create({
+                        'period_id': period.id,
+                        'employee_id': emp.id,
+                    })
+                team_data.append((payout, emp, fte, True))
+                if emp.id not in global_accum:
+                    global_accum[emp.id] = {
+                        'payout': payout, 'branch_payout': 0.0}
+
+            if not team_data:
+                continue
+
+            pool = sum(p.payout_current for p, _, _, _ in team_data)
+            total_fte = sum(f for _, _, f, _ in team_data) or 0.0
+
+            for payout, emp, fte, is_global in team_data:
+                share = (fte / total_fte) if total_fte else 0.0
+                bp = pool * share * rate
+
+                if is_global:
+                    global_accum[emp.id]['branch_payout'] += bp
+                else:
+                    payout.write({
+                        'branch_target': bt.amount_total,
+                        'branch_net_sales': net,
+                        'branch_achievement_pct': achievement,
+                        'branch_tier_id': tier.id if tier else False,
+                        'branch_payout_rate': rate,
+                        'branch_eligible': pool,
+                        'branch_paid': pool * share,
+                        'branch_pool': pool,
+                        'branch_fte': fte,
+                        'branch_fte_share': share,
+                        'branch_payout': bp,
+                    })
+                    results |= payout
+
+        for emp_id, data in global_accum.items():
+            data['payout'].write({
+                'branch_payout': data['branch_payout'],
+            })
+            results |= data['payout']
+
         return results
 
     def _run(self, rule, Transaction):
@@ -320,6 +380,9 @@ class IncentivePayout(models.Model):
         log.append('Target incentive=%s bonus=%s mixed=%s' % (t_inc, t_bon, is_mixed))
 
         # ---------- SQ1: tier from UNRESTRICTED net sales ----------
+        # DP lines are part of the achievement on purpose: they select the
+        # tier of the month they are invoiced in, they are just not paid out
+        # until the order settles (SQ2/SQ3 exclude them).
         source_tx = Transaction.search([
             ('employee_id', '=', employee.id),
             ('source_period_id', '=', period.id),
@@ -354,11 +417,18 @@ class IncentivePayout(models.Model):
         source_tx._stamp_tier(tier)
 
         # ---------- SQ2: discount-eligible base + bucket split ----------
+        # Down-payment lines moved SQ1 above, but they are not payable: a DP
+        # only determines the tier of its month. The order is released in full
+        # on the final invoice's real product line, when that one is paid.
         eligible_tx = source_tx.filtered(
-            lambda t: t.is_discount_eligible and t.transaction_type == 'invoice')
+            lambda t: t.is_discount_eligible
+            and t.transaction_type == 'invoice'
+            and not t.is_downpayment)
         excluded = sum(
             t.base_amount for t in source_tx
-            if not t.is_discount_eligible and t.transaction_type == 'invoice')
+            if not t.is_discount_eligible
+            and t.transaction_type == 'invoice'
+            and not t.is_downpayment)
         self.excluded_discount = excluded
 
         eligible_base = sum(eligible_tx.mapped('base_amount'))
@@ -394,7 +464,7 @@ class IncentivePayout(models.Model):
             bon = min(tx.base_amount - inc, remaining_bon)
             tx.bonus_alloc = bon
             remaining_bon -= bon
-        source_tx.filtered(lambda t: not t.is_discount_eligible).write({
+        (source_tx - eligible_tx).write({
             'incentive_alloc': 0.0, 'bonus_alloc': 0.0})
 
         # ---------- SQ3: only what is FULLY PAID ----------
@@ -413,6 +483,7 @@ class IncentivePayout(models.Model):
             ('is_discount_eligible', '=', True),
             ('is_payment_eligible', '=', True),
             ('transaction_type', '=', 'invoice'),
+            ('is_downpayment', '=', False),
             ('state', '!=', 'reversed'),
             ('incentive_alloc', '>', 0.0),
         ])
