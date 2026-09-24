@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_pos_order_form_inherit_incentive" model="ir.ui.view">
+        <field name="name">pos.order.form.inherit.incentive</field>
+        <field name="model">pos.order</field>
+        <field name="inherit_id" ref="point_of_sale.view_pos_pos_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='employee_id']" position="after">
+                <field name="incentive_transaction_ids" readonly="1" invisible="not incentive_transaction_ids">
+                    <list>
+                        <field name="source_period_id"/>
+                        <field name="base_amount"/>
+                        <field name="is_payment_eligible"/>
+                        <field name="state"/>
+                    </list>
+                </field>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

@@ -36,18 +36,30 @@ class IncentiveTransaction(models.Model):
     _order = 'source_period_id desc, employee_id, id'
     _rec_name = 'display_ref'
 
+    # -- source type ---------------------------------------------------
+    source_type = fields.Selection([
+        ('invoice', 'Invoice'),
+        ('pos', 'POS Order'),
+    ], string='Source', default='invoice', required=True, index=True)
+
     # -- links ---------------------------------------------------------
     move_line_id = fields.Many2one(
         'account.move.line', string='Invoice Line', ondelete='cascade', index=True)
     move_id = fields.Many2one(
         'account.move', string='Invoice', ondelete='cascade', index=True)
+    pos_order_line_id = fields.Many2one(
+        'pos.order.line', string='POS Order Line', ondelete='cascade', index=True)
+    pos_order_id = fields.Many2one(
+        'pos.order', string='POS Order', ondelete='cascade', index=True)
     employee_id = fields.Many2one('hr.employee', required=True, index=True)
     branch_id = fields.Many2one(
         related='employee_id.incentive_branch_id', store=True, readonly=True)
     business_type = fields.Selection(
         related='employee_id.incentive_business_type', store=True, readonly=True)
-    partner_id = fields.Many2one(related='move_id.partner_id', store=True, readonly=True)
-    product_id = fields.Many2one(related='move_line_id.product_id', store=True, readonly=True)
+    partner_id = fields.Many2one(
+        'res.partner', compute='_compute_partner_id', store=True, readonly=True)
+    product_id = fields.Many2one(
+        'product.product', compute='_compute_product_id', store=True, readonly=True)
     company_id = fields.Many2one(
         'res.company', required=True, default=lambda self: self.env.company)
     currency_id = fields.Many2one(related='company_id.currency_id', readonly=True)
@@ -142,16 +154,37 @@ class IncentiveTransaction(models.Model):
     _sql_constraints = [
         ('move_line_uniq', 'unique(move_line_id, employee_id)',
          'An invoice line already has an incentive transaction for this salesperson.'),
+        ('pos_line_uniq', 'unique(pos_order_line_id, employee_id)',
+         'A POS order line already has an incentive transaction for this employee.'),
     ]
 
     # ------------------------------------------------------------------
     # Compute
     # ------------------------------------------------------------------
-    @api.depends('move_id.name', 'product_id.name')
+    @api.depends('move_id.partner_id', 'pos_order_id.partner_id')
+    def _compute_partner_id(self):
+        for rec in self:
+            if rec.source_type == 'pos':
+                rec.partner_id = rec.pos_order_id.partner_id
+            else:
+                rec.partner_id = rec.move_id.partner_id
+
+    @api.depends('move_line_id.product_id', 'pos_order_line_id.product_id')
+    def _compute_product_id(self):
+        for rec in self:
+            if rec.source_type == 'pos':
+                rec.product_id = rec.pos_order_line_id.product_id
+            else:
+                rec.product_id = rec.move_line_id.product_id
+
+    @api.depends('move_id.name', 'pos_order_id.pos_reference', 'product_id.name')
     def _compute_display_ref(self):
         for rec in self:
-            rec.display_ref = '%s / %s' % (
-                rec.move_id.name or '-', rec.product_id.display_name or '-')
+            if rec.source_type == 'pos':
+                ref = rec.pos_order_id.pos_reference or '-'
+            else:
+                ref = rec.move_id.name or '-'
+            rec.display_ref = '%s / %s' % (ref, rec.product_id.display_name or '-')
 
     @api.depends('source_period_id', 'payment_period_id')
     def _compute_is_prior_period(self):
@@ -291,10 +324,97 @@ class IncentiveTransaction(models.Model):
                      len(created | pending), period.name)
         return created
 
+    @api.model
+    def _generate_pos_for_period(self, period):
+        """Create/refresh transactions for POS orders within ``period``.
+
+        Only non-invoiced POS orders are processed here. Invoiced POS orders
+        already create an account.move which is picked up by
+        _generate_for_period, with the employee correctly set via the
+        pos.order._generate_pos_order_invoice override.
+
+        POS payments are collected at order time, so every POS transaction is
+        immediately payment-eligible with payment_period = source_period.
+        """
+        period.ensure_one()
+        if period.state == 'locked':
+            raise UserError(_('Period %s is locked.') % period.name)
+
+        rule = period.rule_id
+        max_discount = rule.max_discount if rule else 35.0
+
+        orders = self.env['pos.order'].search([
+            ('state', 'in', ('paid', 'done', 'invoiced')),
+            ('date_order', '>=', period.date_start),
+            ('date_order', '<=', period.date_end),
+            ('account_move', '=', False),
+            ('company_id', '=', period.company_id.id),
+        ])
+
+        created = self.browse()
+        for order in orders:
+            employee = order.employee_id
+            if not employee:
+                continue
+            if not employee.incentive_branch_id:
+                continue
+
+            is_return = order.amount_total < 0
+            order_date = order.date_order.date() if order.date_order else period.date_start
+
+            for line in order.lines:
+                if not line.product_id:
+                    continue
+                existing = self.search([
+                    ('pos_order_line_id', '=', line.id),
+                    ('employee_id', '=', employee.id),
+                ], limit=1)
+
+                sign = -1 if is_return else 1
+                vals = {
+                    'source_type': 'pos',
+                    'pos_order_line_id': line.id,
+                    'pos_order_id': order.id,
+                    'employee_id': employee.id,
+                    'company_id': order.company_id.id,
+                    'source_period_id': period.id,
+                    'transaction_type': 'refund' if is_return else 'invoice',
+                    'base_amount': sign * line.price_subtotal,
+                    'discount': line.discount,
+                    'is_downpayment': False,
+                    'is_discount_eligible': line.discount <= max_discount,
+                    'eligibility_note': (
+                        _('Line discount %.2f%% exceeds the %.2f%% cap.')
+                        % (line.discount, max_discount)
+                        if line.discount > max_discount else False),
+                    'is_payment_eligible': True,
+                    'payment_date': order_date,
+                    'payment_period_id': period.id,
+                    'payout_period_id': period.id,
+                    'state': 'confirmed',
+                }
+                if existing:
+                    if existing.state == 'paid_out':
+                        continue
+                    existing.write(vals)
+                    created |= existing
+                else:
+                    created |= self.create(vals)
+
+        _logger.info('Incentive POS: %s transactions generated for period %s',
+                     len(created), period.name)
+        return created
+
     def _refresh_payment_stamp(self):
-        """Set payment_date / payment_period_id when the invoice is fully paid."""
+        """Set payment_date / payment_period_id when the invoice is fully paid.
+
+        POS transactions are always paid at order time, so their payment stamp
+        is set during generation and skipped here.
+        """
         Period = self.env['incentive.period']
         for rec in self:
+            if rec.source_type == 'pos':
+                continue
             move = rec.move_id
             if not move:
                 continue

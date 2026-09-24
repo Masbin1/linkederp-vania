@@ -9,7 +9,9 @@
                   decoration-muted="not is_discount_eligible"
                   decoration-info="is_prior_period"
                   decoration-danger="transaction_type == 'refund'">
-                <field name="move_id"/>
+                <field name="source_type" optional="show"/>
+                <field name="move_id" optional="show"/>
+                <field name="pos_order_id" optional="show"/>
                 <field name="employee_id"/>
                 <field name="branch_id" optional="show"/>
                 <field name="product_id" optional="hide"/>
@@ -50,8 +52,11 @@
                     <div class="oe_title"><h1><field name="display_ref" readonly="1"/></h1></div>
                     <group>
                         <group string="Source">
-                            <field name="move_id"/>
-                            <field name="move_line_id"/>
+                            <field name="source_type"/>
+                            <field name="move_id" invisible="source_type == 'pos'"/>
+                            <field name="move_line_id" invisible="source_type == 'pos'"/>
+                            <field name="pos_order_id" invisible="source_type != 'pos'"/>
+                            <field name="pos_order_line_id" invisible="source_type != 'pos'"/>
                             <field name="employee_id"/>
                             <field name="partner_id"/>
                             <field name="transaction_type"/>
@@ -115,6 +120,11 @@
                         domain="[('is_prior_period','=',True)]"/>
                 <filter name="f_refund" string="Refunds"
                         domain="[('transaction_type','=','refund')]"/>
+                <separator/>
+                <filter name="f_invoice_source" string="From Invoice"
+                        domain="[('source_type','=','invoice')]"/>
+                <filter name="f_pos_source" string="From POS"
+                        domain="[('source_type','=','pos')]"/>
                 <group>
                     <filter name="g_source" string="Source Period"
                             context="{'group_by':'source_period_id'}"/>
@@ -124,6 +134,7 @@
                             context="{'group_by':'employee_id'}"/>
                     <filter name="g_branch" string="Branch" context="{'group_by':'branch_id'}"/>
                     <filter name="g_bucket" string="Bucket" context="{'group_by':'bucket'}"/>
+                    <filter name="g_source_type" string="Source Type" context="{'group_by':'source_type'}"/>
                 </group>
             </search>
         </field>

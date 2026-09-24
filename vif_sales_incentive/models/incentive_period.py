@@ -128,7 +128,9 @@ class IncentivePeriod(models.Model):
             rec.branch_target_ids.filtered(
                 lambda b: not b._is_closed())._check_cascade_current()
             rec.transaction_ids  # noqa -- keep prefetch warm
-            self.env['incentive.transaction']._generate_for_period(rec)
+            Transaction = self.env['incentive.transaction']
+            Transaction._generate_for_period(rec)
+            Transaction._generate_pos_for_period(rec)
             self.env['incentive.payout']._compute_for_period(rec)
             rec.state = 'calculated'
         return True

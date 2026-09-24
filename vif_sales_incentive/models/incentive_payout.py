@@ -457,7 +457,7 @@ class IncentivePayout(models.Model):
         # already-calculated earlier invoice into the bonus bucket.
         remaining_inc = elig_inc
         remaining_bon = elig_bon
-        for tx in eligible_tx.sorted(lambda t: (t.invoice_date or _date.max, t.id)):
+        for tx in eligible_tx.sorted(lambda t: (t.invoice_date or t.payment_date or _date.max, t.id)):
             inc = min(tx.base_amount, remaining_inc)
             tx.incentive_alloc = inc
             remaining_inc -= inc

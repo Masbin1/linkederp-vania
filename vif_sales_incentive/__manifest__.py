@@ -34,6 +34,7 @@ Implements the incentive scheme defined in the client's Scenario Matrix:
         'hr',
         'sale_management',
         'account',
+        'point_of_sale',
     ],
     'data': [
         'security/incentive_groups.xml',
@@ -58,6 +59,7 @@ Implements the incentive scheme defined in the client's Scenario Matrix:
         'views/incentive_refund_policy_views.xml',
         'views/hr_employee_views.xml',
         'views/account_move_views.xml',
+        'views/pos_order_views.xml',
         'wizards/incentive_target_cascade_views.xml',
         'wizards/incentive_transaction_refund_views.xml',
         'views/incentive_menus.xml',
