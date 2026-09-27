@@ -6,6 +6,8 @@ shares, not to the sale order's salesperson.
 * A salesperson who is not on the project earns nothing from it.
 * No shares filled in -> the PM takes 100%.
 * A share with nobody in its slot goes to the PM.
+* A share whose person is not in the scheme (no sales branch, or no target
+  in the invoice's period) goes to the PM.
 * No project at all -> the invoice salesperson keeps 100% (old behaviour).
 
 Salesperson 2/3 and the share fields are Odoo Studio fields that only exist
@@ -14,6 +16,7 @@ in the client database; the tests that need them skip elsewhere.
 Runs in 2028 so it never collides with seeded or other test periods.
 """
 from odoo import fields
+from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, tagged
 
 STUDIO_FIELDS = (
@@ -57,6 +60,13 @@ class TestProjectSplit(TransactionCase):
             'date_end': fields.Date.to_date('2028-03-31'),
             'company_id': cls.company.id,
         })
+        for employee in (cls.seller, cls.pm, cls.sp2, cls.sp3):
+            cls.env['incentive.target'].create({
+                'period_id': cls.period.id,
+                'employee_id': employee.id,
+                'target_type': 'incentive',
+                'amount': 1_000_000.0,
+            })
         cls.partner = cls.env['res.partner'].create({'name': 'Split Customer'})
         cls.product = cls.env['product.product'].create({
             'name': 'Split Widget', 'type': 'consu',
@@ -185,3 +195,46 @@ class TestProjectSplit(TransactionCase):
             {tx.employee_id: tx.base_amount for tx in refunds},
             {self.pm: -250.0, self.sp2: -750.0})
         self.assertTrue(all(refunds.mapped('reversal_of_id')))
+
+    def test_salesperson_without_target_share_goes_to_pm(self):
+        self._require_studio()
+        self.env['incentive.target'].search([
+            ('employee_id', '=', self.sp3.id)]).unlink()
+        project = self._project(
+            x_studio_salesperson_2=self.sp2_user.id,
+            x_studio_salesperson_3=self.sp3_user.id,
+            x_studio_komisi_pm=0.2,
+            x_studio_komisi_salesperson_2=0.4,
+            x_studio_komisi_salesperson_3=0.4,
+        )
+        invoice = self._invoice(project)
+        self.assertEqual(self._credit(invoice), {
+            self.pm: 600.0, self.sp2: 400.0})
+
+    def test_salesperson_without_branch_share_goes_to_pm(self):
+        self._require_studio()
+        self.sp2.incentive_branch_id = False
+        project = self._project(
+            x_studio_salesperson_2=self.sp2_user.id,
+            x_studio_komisi_pm=0.3,
+            x_studio_komisi_salesperson_2=0.7,
+        )
+        invoice = self._invoice(project)
+        self.assertEqual(self._credit(invoice), {self.pm: 1000.0})
+
+    def test_calculate_refuses_credited_people_without_target(self):
+        self.env['incentive.target'].search([
+            ('employee_id', '=', self.pm.id)]).unlink()
+        self._credit(self._invoice(self._project()))
+        with self.assertRaisesRegex(UserError, 'Manager'):
+            self.period._check_credited_employees()
+
+    def test_calculate_refuses_credited_people_without_branch(self):
+        self.seller.incentive_branch_id = False
+        self._credit(self._invoice())
+        with self.assertRaisesRegex(UserError, 'No Sales Branch'):
+            self.period._check_credited_employees()
+
+    def test_calculate_passes_when_everyone_is_set_up(self):
+        self._credit(self._invoice(self._project()))
+        self.period._check_credited_employees()

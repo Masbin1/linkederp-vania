@@ -15,7 +15,7 @@ PROJECT_SPLIT_SLOTS = [
 class ProjectProject(models.Model):
     _inherit = 'project.project'
 
-    def _incentive_split(self):
+    def _incentive_split(self, period=None):
         """Who gets the credit for a sale on this project, and how much.
 
         Returns ``[(employee, share, role), ...]`` with shares summing to 1,
@@ -28,17 +28,35 @@ class ProjectProject(models.Model):
           * all shares empty/0       -> PM takes 100%
           * a share with no person   -> that share goes to the PM
             (or a person without an employee record)
+          * SP2 / SP3 not in the     -> that share goes to the PM
+            scheme (no sales branch, or no target in ``period``)
           * shares under 100%        -> the remainder goes to the PM
           * shares over 100%         -> scaled down proportionally
           * one person in two slots  -> their shares are added up
+
+        The PM keeps their share even when not in the scheme themselves:
+        there is nobody further up to hand it to.
         """
         self.ensure_one()
         Employee = self.env['hr.employee']
+        Target = self.env['incentive.target']
 
         def employee_of(user):
             if not user:
                 return Employee
             return Employee.search([('user_id', '=', user.id)], limit=1)
+
+        def in_scheme(employee):
+            # Without a branch the payout engine never sees the person, and
+            # without a target in the period they have no tier -- either way
+            # the share would earn nothing, so the PM gets it instead.
+            if not (employee.incentive_branch_id
+                    and employee.incentive_business_type):
+                return False
+            return not period or bool(Target.search_count([
+                ('employee_id', '=', employee.id),
+                ('period_id', '=', period.id),
+            ], limit=1))
 
         pm = employee_of(self.user_id)
         shares = {}   # employee -> [share, role]
@@ -49,7 +67,7 @@ class ProjectProject(models.Model):
                 continue
             user = self[user_field] if user_field in self._fields else False
             employee = employee_of(user)
-            if not employee:
+            if not employee or (employee != pm and not in_scheme(employee)):
                 orphan += share
                 continue
             shares.setdefault(employee, [0.0, role])[0] += share

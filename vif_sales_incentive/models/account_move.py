@@ -157,18 +157,28 @@ class AccountMoveLine(models.Model):
         gets credit if they are one of them. Without a project (or when nobody
         on it is an employee) the invoice salesperson keeps 100%.
 
-        ``cache`` (project -> split) saves re-resolving the same project for
-        every line of a period.
+        Whether SP2 / SP3 are in the scheme is judged in the period of the
+        invoice -- for a credit note, of the invoice it reverses, so the
+        refund is split exactly like the sale it takes back.
+
+        ``cache`` ((project, period) -> split) saves re-resolving the same
+        project for every line of a period.
         """
         self.ensure_one()
         project = self._incentive_project()
         if project:
+            move = self.move_id
+            if move.move_type == 'out_refund' and move.reversed_entry_id:
+                move = move.reversed_entry_id
+            period = self.env['incentive.period']._get_period_for_date(
+                move.invoice_date, move.company_id)
+            key = (project, period)
             if cache is None:
-                split = project._incentive_split()
+                split = project._incentive_split(period)
             else:
-                if project not in cache:
-                    cache[project] = project._incentive_split()
-                split = cache[project]
+                if key not in cache:
+                    cache[key] = project._incentive_split(period)
+                split = cache[key]
             if split:
                 return [(emp, share, role, project) for emp, share, role in split]
         employee = self.move_id._incentive_fallback_employee()

@@ -45,8 +45,8 @@ class TestIdealTeamSize(TransactionCase):
 
         rule = cls.env['incentive.rule'].create({
             'name': 'Ideal Rule',
-            'date_from': fields.Date.to_date('2025-01-01'),
-            'date_to': fields.Date.to_date('2025-12-31'),
+            'date_from': fields.Date.to_date('2031-01-01'),
+            'date_to': fields.Date.to_date('2031-12-31'),
             'company_id': cls.company.id,
             'tier_ids': [(0, 0, {
                 'name': 'Tier 1', 'level': 1, 'achievement_min': 0.0,
@@ -54,9 +54,9 @@ class TestIdealTeamSize(TransactionCase):
             })],
         })
         cls.period = cls.env['incentive.period'].create({
-            'name': 'Ideal Aug 2025',
-            'date_start': fields.Date.to_date('2025-08-01'),
-            'date_end': fields.Date.to_date('2025-08-31'),
+            'name': 'Ideal Aug 2031',
+            'date_start': fields.Date.to_date('2031-08-01'),
+            'date_end': fields.Date.to_date('2031-08-31'),
             'rule_id': rule.id,
             'company_id': cls.company.id,
         })
@@ -163,7 +163,7 @@ class TestIdealTeamSize(TransactionCase):
         bt = self.env['incentive.branch.target'].search([
             ('period_id', '=', self.period.id),
             ('branch_id', '=', self.branch.id)], limit=1)
-        self.m3.incentive_date_end = fields.Date.to_date('2025-08-20')
+        self.m3.incentive_date_end = fields.Date.to_date('2031-08-20')
         bt.invalidate_recordset(['needs_recascade', 'recascade_reason'])
         self.assertTrue(bt.needs_recascade)
         self.assertIn('I Member 3', bt.recascade_reason)
@@ -173,7 +173,7 @@ class TestIdealTeamSize(TransactionCase):
         bt = self.env['incentive.branch.target'].search([
             ('period_id', '=', self.period.id),
             ('branch_id', '=', self.branch.id)], limit=1)
-        self.m3.incentive_date_end = fields.Date.to_date('2025-08-20')
+        self.m3.incentive_date_end = fields.Date.to_date('2031-08-20')
         self.env['incentive.target.cascade'].create({
             'period_id': self.period.id,
             'branch_ids': [(6, 0, self.branch.ids)],
@@ -191,7 +191,7 @@ class TestIdealTeamSize(TransactionCase):
         bt = self.env['incentive.branch.target'].search([
             ('period_id', '=', self.period.id),
             ('branch_id', '=', self.branch.id)], limit=1)
-        self.m3.incentive_date_end = fields.Date.to_date('2025-08-20')
+        self.m3.incentive_date_end = fields.Date.to_date('2031-08-20')
         bt.invalidate_recordset(['needs_recascade', 'recascade_reason'])
         with self.assertRaises(UserError):
             bt.action_calculate()
@@ -204,7 +204,7 @@ class TestIdealTeamSize(TransactionCase):
         bt = self.env['incentive.branch.target'].search([
             ('period_id', '=', self.period.id),
             ('branch_id', '=', self.branch.id)], limit=1)
-        self.m3.incentive_date_end = fields.Date.to_date('2025-08-20')
+        self.m3.incentive_date_end = fields.Date.to_date('2031-08-20')
         self.env['incentive.target.cascade'].create({
             'period_id': self.period.id,
             'branch_ids': [(6, 0, self.branch.ids)],
@@ -223,7 +223,7 @@ class TestIdealTeamSize(TransactionCase):
             'name': 'I Late Hire', 'incentive_branch_id': self.branch.id,
             'incentive_business_type': 'b2b',
             'incentive_designation_id': self.team_desig.id,
-            'incentive_date_start': fields.Date.to_date('2025-08-18'),
+            'incentive_date_start': fields.Date.to_date('2031-08-18'),
         })
         bt.invalidate_recordset(['needs_recascade', 'recascade_reason'])
         self.assertTrue(bt.needs_recascade)
@@ -234,13 +234,13 @@ class TestIdealTeamSize(TransactionCase):
     # ------------------------------------------------------------------
     def test_join_on_the_resignation_date_is_rejected(self):
         """21 Aug out, 21 Aug in -- both active on the 21st. One seat, two people."""
-        self.m3.incentive_date_end = fields.Date.to_date('2025-08-21')
+        self.m3.incentive_date_end = fields.Date.to_date('2031-08-21')
         with self.assertRaises(ValidationError):
             self.env['hr.employee'].create({
                 'name': 'I Replacement', 'incentive_branch_id': self.branch.id,
                 'incentive_business_type': 'b2b',
                 'incentive_designation_id': self.team_desig.id,
-                'incentive_date_start': fields.Date.to_date('2025-08-21'),
+                'incentive_date_start': fields.Date.to_date('2031-08-21'),
             })
 
     def test_resigning_onto_a_colleagues_start_date_is_rejected(self):
@@ -250,31 +250,31 @@ class TestIdealTeamSize(TransactionCase):
             'name': 'I Joiner', 'incentive_branch_id': self.branch.id,
             'incentive_business_type': 'b2b',
             'incentive_designation_id': self.team_desig.id,
-            'incentive_date_start': fields.Date.to_date('2025-08-21'),
+            'incentive_date_start': fields.Date.to_date('2031-08-21'),
         })
         self.assertTrue(joiner.id)
         with self.assertRaises(ValidationError):
-            self.m3.incentive_date_end = fields.Date.to_date('2025-08-21')
+            self.m3.incentive_date_end = fields.Date.to_date('2031-08-21')
 
     def test_join_the_day_after_is_allowed(self):
         """The fix the error message asks for must actually work."""
-        self.m3.incentive_date_end = fields.Date.to_date('2025-08-21')
+        self.m3.incentive_date_end = fields.Date.to_date('2031-08-21')
         replacement = self.env['hr.employee'].create({
             'name': 'I Replacement OK', 'incentive_branch_id': self.branch.id,
             'incentive_business_type': 'b2b',
             'incentive_designation_id': self.team_desig.id,
-            'incentive_date_start': fields.Date.to_date('2025-08-22'),
+            'incentive_date_start': fields.Date.to_date('2031-08-22'),
         })
         self.assertTrue(replacement.id)
 
     def test_the_other_business_type_is_a_different_team(self):
         """One branch, two populations: a B2C hire on the day a B2B colleague
         leaves is a different seat, so it stands."""
-        self.m3.incentive_date_end = fields.Date.to_date('2025-08-21')
+        self.m3.incentive_date_end = fields.Date.to_date('2031-08-21')
         b2c = self.env['hr.employee'].create({
             'name': 'I B2C', 'incentive_branch_id': self.branch.id,
             'incentive_business_type': 'b2c',
             'incentive_designation_id': self.team_desig.id,
-            'incentive_date_start': fields.Date.to_date('2025-08-21'),
+            'incentive_date_start': fields.Date.to_date('2031-08-21'),
         })
         self.assertTrue(b2c.id)

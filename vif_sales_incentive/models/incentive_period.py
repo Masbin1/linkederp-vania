@@ -108,6 +108,54 @@ class IncentivePeriod(models.Model):
                 'a later period instead.'
             ) % ', '.join(locked.mapped('name')))
 
+    def _check_credited_employees(self, branch_target=None):
+        """Refuse to pay a period where credited people cannot earn.
+
+        The payout engine only runs people with a target, and the branch
+        stream only sees people with a sales branch. Anyone credited on this
+        period's transactions without those would silently get nothing --
+        which is how a whole month once came out as empty payouts because the
+        cascade had not been run. Called after the transactions are generated,
+        so the UserError rolls them back too.
+        """
+        self.ensure_one()
+        domain = [
+            ('source_period_id', '=', self.id),
+            ('state', '!=', 'reversed'),
+        ]
+        if branch_target:
+            # A branch calculate answers for its own team, plus the people no
+            # branch owns -- otherwise nobody would ever report them.
+            domain += ['|', '&',
+                       ('branch_id', '=', branch_target.branch_id.id),
+                       ('business_type', '=', branch_target.business_type),
+                       ('branch_id', '=', False)]
+        employees = self.env['incentive.transaction'].search(
+            domain).mapped('employee_id')
+        with_target = self.env['incentive.target'].search([
+            ('period_id', '=', self.id),
+            ('employee_id', 'in', employees.ids),
+        ]).mapped('employee_id')
+
+        no_branch = employees.filtered(
+            lambda e: not (e.incentive_branch_id and e.incentive_business_type))
+        no_target = employees - with_target - no_branch
+        if not (no_branch or no_target):
+            return
+        lines = []
+        if no_branch:
+            lines.append(_('No Sales Branch / Business Type: %s') % ', '.join(
+                no_branch.mapped('name')))
+        if no_target:
+            lines.append(_('No target in %s: %s') % (self.name, ', '.join(
+                no_target.mapped('name'))))
+        raise UserError(_(
+            'These people have sales in %(period)s but would get no payout:'
+            '\n\n%(details)s\n\n'
+            'Fill in their employee incentive settings and run the target '
+            'cascade, then calculate again.',
+            period=self.name, details='\n'.join('- ' + l for l in lines)))
+
     # ------------------------------------------------------------------
     # State machine
     # ------------------------------------------------------------------
@@ -131,6 +179,7 @@ class IncentivePeriod(models.Model):
             Transaction = self.env['incentive.transaction']
             Transaction._generate_for_period(rec)
             Transaction._generate_pos_for_period(rec)
+            rec._check_credited_employees()
             self.env['incentive.payout']._compute_for_period(rec)
             rec.state = 'calculated'
         return True

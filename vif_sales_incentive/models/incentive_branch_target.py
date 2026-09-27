@@ -230,6 +230,7 @@ class IncentiveBranchTarget(models.Model):
                     'recalculate.') % rec.display_name)
             rec._check_cascade_current()
             self.env['incentive.transaction']._generate_for_period(rec.period_id)
+            rec.period_id._check_credited_employees(branch_target=rec)
             self.env['incentive.payout']._compute_for_period(
                 rec.period_id, branch_target=rec)
             rec.state = 'calculated'

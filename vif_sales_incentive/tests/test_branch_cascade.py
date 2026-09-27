@@ -41,8 +41,8 @@ class TestBranchCascade(TransactionCase):
 
         cls.rule = cls.env['incentive.rule'].create({
             'name': 'Test Rule',
-            'date_from': fields.Date.to_date('2025-01-01'),
-            'date_to': fields.Date.to_date('2025-12-31'),
+            'date_from': fields.Date.to_date('2031-01-01'),
+            'date_to': fields.Date.to_date('2031-12-31'),
             'company_id': cls.company.id,
             'tier_ids': [(0, 0, {
                 'name': 'Tier 1', 'level': 1, 'achievement_min': 0.0,
@@ -53,9 +53,9 @@ class TestBranchCascade(TransactionCase):
             })],
         })
         cls.period = cls.env['incentive.period'].create({
-            'name': 'Test Mar 2025',
-            'date_start': fields.Date.to_date('2025-03-01'),
-            'date_end': fields.Date.to_date('2025-03-31'),
+            'name': 'Test Mar 2031',
+            'date_start': fields.Date.to_date('2031-03-01'),
+            'date_end': fields.Date.to_date('2031-03-31'),
             'rule_id': cls.rule.id,
             'company_id': cls.company.id,
         })
