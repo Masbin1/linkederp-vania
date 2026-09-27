@@ -33,8 +33,10 @@ Implements the incentive scheme defined in the client's Scenario Matrix:
         'base',
         'hr',
         'sale_management',
+        'sale_project',
         'account',
         'point_of_sale',
+        'pos_hr',
     ],
     'data': [
         'security/incentive_groups.xml',

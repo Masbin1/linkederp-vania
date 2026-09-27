@@ -52,6 +52,22 @@ class IncentiveTransaction(models.Model):
     pos_order_id = fields.Many2one(
         'pos.order', string='POS Order', ondelete='cascade', index=True)
     employee_id = fields.Many2one('hr.employee', required=True, index=True)
+    project_id = fields.Many2one(
+        'project.project', string='Project', index=True, readonly=True,
+        help="Project behind the invoice's sale order. When set, the line is "
+             "split between the project's PM / Salesperson 2 / Salesperson 3.")
+    split_role = fields.Selection([
+        ('pm', 'Project Manager'),
+        ('sp2', 'Salesperson 2'),
+        ('sp3', 'Salesperson 3'),
+        ('salesperson', 'Salesperson / Cashier'),
+    ], string='Credit Role', default='salesperson', readonly=True,
+        help="Why this employee is credited: a project slot, or the invoice "
+             "salesperson / POS cashier when no project split applies.")
+    split_share = fields.Float(
+        string='Share', digits=(16, 4), default=1.0, readonly=True,
+        help="Fraction of the line credited to this employee (1.0 = 100%). "
+             "Line Amount is already multiplied by it.")
     branch_id = fields.Many2one(
         related='employee_id.incentive_branch_id', store=True, readonly=True)
     business_type = fields.Selection(
@@ -250,45 +266,61 @@ class IncentiveTransaction(models.Model):
         ])
 
         created = self.browse()
+        split_cache = {}
         for line in lines:
-            employee = line.move_id._incentive_employee()
-            if not employee:
-                continue
-            existing = self.search([
-                ('move_line_id', '=', line.id),
-                ('employee_id', '=', employee.id),
-            ], limit=1)
             is_refund = line.move_id.move_type == 'out_refund'
             sign = -1 if is_refund else 1
-            vals = {
-                'move_line_id': line.id,
-                'move_id': line.move_id.id,
-                'employee_id': employee.id,
-                'company_id': line.company_id.id,
-                'source_period_id': period.id,
-                'transaction_type': 'refund' if is_refund else 'invoice',
-                # Keep the sign: a credit note line is positive but must
-                # count negative, and the DP negation on the final invoice
-                # (-50M) must net the DP month back off. Only then does a
-                # 100M order with a 50M DP contribute 50M + 50M across the
-                # two months instead of 50M + 150M.
-                'base_amount': sign * line.price_subtotal,
-                'discount': line.discount,
-                'is_downpayment': line.is_downpayment,
-                'is_discount_eligible': line.discount <= max_discount,
-                'eligibility_note': (
-                    _('Line discount %.2f%% exceeds the %.2f%% cap.')
-                    % (line.discount, max_discount)
-                    if line.discount > max_discount else False),
-                'state': 'confirmed',
-            }
-            if existing:
-                if existing.state == 'paid_out':
-                    continue
-                existing.write(vals)
-                created |= existing
-            else:
-                created |= self.create(vals)
+            # One row per credited employee: the project's PM / SP2 / SP3 by
+            # share, or the invoice salesperson at 100% without a project.
+            for employee, share, role, project in line._incentive_split(split_cache):
+                existing = self.search([
+                    ('move_line_id', '=', line.id),
+                    ('employee_id', '=', employee.id),
+                ], limit=1)
+                vals = {
+                    'move_line_id': line.id,
+                    'move_id': line.move_id.id,
+                    'employee_id': employee.id,
+                    'company_id': line.company_id.id,
+                    'source_period_id': period.id,
+                    'transaction_type': 'refund' if is_refund else 'invoice',
+                    # Keep the sign: a credit note line is positive but must
+                    # count negative, and the DP negation on the final invoice
+                    # (-50M) must net the DP month back off. Only then does a
+                    # 100M order with a 50M DP contribute 50M + 50M across the
+                    # two months instead of 50M + 150M.
+                    'base_amount': line.currency_id.round(
+                        sign * line.price_subtotal * share),
+                    'split_share': share,
+                    'split_role': role,
+                    'project_id': project.id,
+                    'discount': line.discount,
+                    'is_downpayment': line.is_downpayment,
+                    'is_discount_eligible': line.discount <= max_discount,
+                    'eligibility_note': (
+                        _('Line discount %.2f%% exceeds the %.2f%% cap.')
+                        % (line.discount, max_discount)
+                        if line.discount > max_discount else False),
+                    'state': 'confirmed',
+                }
+                if existing:
+                    if existing.state == 'paid_out':
+                        continue
+                    existing.write(vals)
+                    created |= existing
+                else:
+                    created |= self.create(vals)
+
+        # Drop rows for people no longer credited on these lines -- e.g. the
+        # project's PM / salespeople or shares changed, or the old 100%
+        # salesperson row from before the project split. Paid-out and
+        # reversed rows are history and stay.
+        self.search([
+            ('source_type', '=', 'invoice'),
+            ('move_line_id', 'in', lines.ids),
+            ('state', 'not in', ('paid_out', 'reversed')),
+            ('id', 'not in', created.ids),
+        ]).unlink()
 
         # Refresh payment stamps for THIS period's rows and for every older
         # row that is still waiting for payment (S08 / S09 multi-iteration).
@@ -359,7 +391,6 @@ class IncentiveTransaction(models.Model):
             if not employee.incentive_branch_id:
                 continue
 
-            is_return = order.amount_total < 0
             order_date = order.date_order.date() if order.date_order else period.date_start
 
             for line in order.lines:
@@ -370,7 +401,10 @@ class IncentiveTransaction(models.Model):
                     ('employee_id', '=', employee.id),
                 ], limit=1)
 
-                sign = -1 if is_return else 1
+                # A POS return line already carries a negative qty, so its
+                # price_subtotal is negative as-is -- no sign flip, unlike
+                # credit notes whose lines are stored positive.
+                is_return = line.qty < 0
                 vals = {
                     'source_type': 'pos',
                     'pos_order_line_id': line.id,
@@ -379,7 +413,7 @@ class IncentiveTransaction(models.Model):
                     'company_id': order.company_id.id,
                     'source_period_id': period.id,
                     'transaction_type': 'refund' if is_return else 'invoice',
-                    'base_amount': sign * line.price_subtotal,
+                    'base_amount': line.price_subtotal,
                     'discount': line.discount,
                     'is_downpayment': False,
                     'is_discount_eligible': line.discount <= max_discount,
@@ -401,8 +435,20 @@ class IncentiveTransaction(models.Model):
                 else:
                     created |= self.create(vals)
 
-        _logger.info('Incentive POS: %s transactions generated for period %s',
-                     len(created), period.name)
+        # Drop rows this run no longer produces: the cashier was changed (the
+        # old cashier's row would otherwise keep the credit), the order got
+        # invoiced afterwards (the invoice path now owns it), or the cashier
+        # lost their branch. Paid-out rows are history and stay.
+        stale = self.search([
+            ('source_type', '=', 'pos'),
+            ('source_period_id', '=', period.id),
+            ('state', '!=', 'paid_out'),
+            ('id', 'not in', created.ids),
+        ])
+        stale.unlink()
+
+        _logger.info('Incentive POS: %s transactions generated, %s stale removed '
+                     'for period %s', len(created), len(stale), period.name)
         return created
 
     def _refresh_payment_stamp(self):
@@ -494,6 +540,18 @@ class IncentiveTransaction(models.Model):
             r.base_amount for r in self.reversal_ids if r.state != 'reversed')
         return max(self.base_amount + refunded, 0.0)
 
+    def _line_split_transactions(self):
+        """Every invoice row of the same invoice line -- one per person on the
+        project split (just ``self`` when the line is not split). A credit
+        note is issued for the whole line, so refunds work on these together."""
+        self.ensure_one()
+        if not self.move_line_id:
+            return self
+        return self.search([
+            ('move_line_id', '=', self.move_line_id.id),
+            ('transaction_type', '=', 'invoice'),
+        ])
+
     def action_create_reversal(self):
         """Open the refund wizard: create a (partial) credit note for the
         invoice, then link a negative reversal transaction so the payout is
@@ -510,6 +568,8 @@ class IncentiveTransaction(models.Model):
             'target': 'new',
             'context': {
                 'default_transaction_id': self.id,
-                'default_refund_amount': self._refundable_amount(),
+                'default_refund_amount': sum(
+                    tx._refundable_amount()
+                    for tx in self._line_split_transactions()),
             },
         }

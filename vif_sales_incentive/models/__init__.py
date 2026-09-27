@@ -12,3 +12,4 @@ from . import incentive_payout
 from . import hr_employee
 from . import account_move
 from . import pos_order
+from . import project_project

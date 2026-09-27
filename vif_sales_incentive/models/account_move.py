@@ -9,7 +9,9 @@ class AccountMove(models.Model):
         'hr.employee', string='Incentive Salesperson',
         compute='_compute_incentive_employee', store=True, readonly=False,
         help="Defaults to the employee behind the invoice salesperson. "
-             "Override when the commission belongs to somebody else.")
+             "Only used when the invoice has no project: a project invoice "
+             "is credited to the project's PM / Salesperson 2 / Salesperson 3 "
+             "by their commission shares instead.")
     incentive_full_payment_date = fields.Date(
         string='Fully Paid On', compute='_compute_full_payment_date', store=True)
     incentive_transaction_ids = fields.One2many(
@@ -25,9 +27,24 @@ class AccountMove(models.Model):
                     [('user_id', '=', move.invoice_user_id.id)], limit=1)
             move.incentive_employee_id = emp.id or False
 
-    def _incentive_employee(self):
+    def _incentive_fallback_employee(self):
+        """Who gets 100% when no project split applies. A credit note keeps
+        the salesperson of the invoice it reverses."""
         self.ensure_one()
+        if self.move_type == 'out_refund' and self.reversed_entry_id:
+            return (self.reversed_entry_id.incentive_employee_id
+                    or self.incentive_employee_id)
         return self.incentive_employee_id
+
+    def _incentive_project(self):
+        """The project behind the invoice's sale orders. A credit note made
+        without sale links (refund wizard, manual reversal) inherits the
+        project of the invoice it reverses."""
+        self.ensure_one()
+        project = self.invoice_line_ids.sale_line_ids.order_id.project_id[:1]
+        if not project and self.reversed_entry_id:
+            project = self.reversed_entry_id._incentive_project()
+        return project
 
     @api.depends('payment_state', 'line_ids.matched_debit_ids',
                  'line_ids.matched_credit_ids')
@@ -80,16 +97,6 @@ class AccountMove(models.Model):
         Period = self.env['incentive.period']
         for cn in self:
             src = cn.reversed_entry_id
-            employee = src.incentive_employee_id or cn.incentive_employee_id
-            if not employee:
-                continue
-            invoice_tx = Tx.search([
-                ('move_id', '=', src.id),
-                ('employee_id', '=', employee.id),
-                ('transaction_type', '=', 'invoice'),
-            ], limit=1)
-            if not invoice_tx:
-                continue
             period = Period._get_period_for_date(
                 cn.invoice_date or fields.Date.context_today(cn),
                 cn.company_id)
@@ -100,28 +107,72 @@ class AccountMove(models.Model):
             for line in cn.invoice_line_ids.filtered(
                     lambda l: l.display_type == 'product'
                     and not l.is_downpayment):
-                if Tx.search_count([
-                    ('move_line_id', '=', line.id),
-                    ('employee_id', '=', employee.id),
-                ]):
-                    continue
-                Tx.create({
-                    'move_line_id': line.id,
-                    'move_id': cn.id,
-                    'employee_id': employee.id,
-                    'company_id': cn.company_id.id,
-                    'source_period_id': period.id,
-                    'transaction_type': 'refund',
-                    'base_amount': -abs(line.price_subtotal),
-                    'discount': line.discount,
-                    'is_discount_eligible': invoice_tx.is_discount_eligible,
-                    'reversal_of_id': invoice_tx.id,
-                    'state': 'confirmed',
-                })
+                # Same project split as the invoice, so each person on the
+                # project gives back their own share of the refund.
+                for employee, share, role, project in line._incentive_split():
+                    invoice_tx = Tx.search([
+                        ('move_id', '=', src.id),
+                        ('employee_id', '=', employee.id),
+                        ('transaction_type', '=', 'invoice'),
+                    ], limit=1)
+                    if not invoice_tx:
+                        continue
+                    if Tx.search_count([
+                        ('move_line_id', '=', line.id),
+                        ('employee_id', '=', employee.id),
+                    ]):
+                        continue
+                    Tx.create({
+                        'move_line_id': line.id,
+                        'move_id': cn.id,
+                        'employee_id': employee.id,
+                        'company_id': cn.company_id.id,
+                        'source_period_id': period.id,
+                        'transaction_type': 'refund',
+                        'base_amount': cn.currency_id.round(
+                            -abs(line.price_subtotal) * share),
+                        'split_share': share,
+                        'split_role': role,
+                        'project_id': project.id,
+                        'discount': line.discount,
+                        'is_discount_eligible': invoice_tx.is_discount_eligible,
+                        'reversal_of_id': invoice_tx.id,
+                        'state': 'confirmed',
+                    })
 
 
 class AccountMoveLine(models.Model):
     _inherit = 'account.move.line'
+
+    def _incentive_project(self):
+        self.ensure_one()
+        return (self.sale_line_ids.order_id.project_id[:1]
+                or self.move_id._incentive_project())
+
+    def _incentive_split(self, cache=None):
+        """``[(employee, share, role, project), ...]`` for this line.
+
+        A line on a project is split between the project's PM / Salesperson 2
+        / Salesperson 3 by their commission shares; the SO salesperson only
+        gets credit if they are one of them. Without a project (or when nobody
+        on it is an employee) the invoice salesperson keeps 100%.
+
+        ``cache`` (project -> split) saves re-resolving the same project for
+        every line of a period.
+        """
+        self.ensure_one()
+        project = self._incentive_project()
+        if project:
+            if cache is None:
+                split = project._incentive_split()
+            else:
+                if project not in cache:
+                    cache[project] = project._incentive_split()
+                split = cache[project]
+            if split:
+                return [(emp, share, role, project) for emp, share, role in split]
+        employee = self.move_id._incentive_fallback_employee()
+        return [(employee, 1.0, 'salesperson', project)] if employee else []
 
     # ponytail: not stored -- it is a display-only column on the invoice line
     # list, so computing on read costs nothing and no stored row can go stale

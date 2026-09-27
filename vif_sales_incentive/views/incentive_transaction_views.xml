@@ -13,6 +13,9 @@
                 <field name="move_id" optional="show"/>
                 <field name="pos_order_id" optional="show"/>
                 <field name="employee_id"/>
+                <field name="project_id" optional="show"/>
+                <field name="split_role" optional="show"/>
+                <field name="split_share" optional="show" widget="percentage"/>
                 <field name="branch_id" optional="show"/>
                 <field name="product_id" optional="hide"/>
                 <field name="invoice_date"/>
@@ -58,6 +61,9 @@
                             <field name="pos_order_id" invisible="source_type != 'pos'"/>
                             <field name="pos_order_line_id" invisible="source_type != 'pos'"/>
                             <field name="employee_id"/>
+                            <field name="project_id" invisible="not project_id"/>
+                            <field name="split_role"/>
+                            <field name="split_share" widget="percentage"/>
                             <field name="partner_id"/>
                             <field name="transaction_type"/>
                         </group>
@@ -104,6 +110,7 @@
             <search>
                 <field name="employee_id"/>
                 <field name="move_id"/>
+                <field name="project_id"/>
                 <field name="source_period_id"/>
                 <field name="payment_period_id"/>
                 <filter name="f_eligible" string="Discount Eligible"
@@ -135,6 +142,7 @@
                     <filter name="g_branch" string="Branch" context="{'group_by':'branch_id'}"/>
                     <filter name="g_bucket" string="Bucket" context="{'group_by':'bucket'}"/>
                     <filter name="g_source_type" string="Source Type" context="{'group_by':'source_type'}"/>
+                    <filter name="g_project" string="Project" context="{'group_by':'project_id'}"/>
                 </group>
             </search>
         </field>

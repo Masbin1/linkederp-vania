@@ -11,6 +11,8 @@ Modul **VIF Sales Incentive** digunakan untuk menghitung insentif sales setiap b
 - Target sales per cabang dan per individu
 - Pencapaian penjualan
 - Invoice yang sudah lunas
+- Pembagian komisi per **Project** (PM, Salesperson 2, Salesperson 3)
+- Transaksi kasir di **Point of Sale (POS)**
 - Tier pencapaian
 - Bonus dari target tambahan
 - Branch payout untuk tim cabang
@@ -56,7 +58,7 @@ Setelah modul terpasang, menu utama yang digunakan adalah **Sales Incentive**.
 | **Targets** | Melihat target per karyawan |
 | **Cascade Branch Target** | Membagikan target cabang ke masing-masing sales |
 | **Payouts** | Melihat hasil insentif yang dihitung |
-| **Transactions** | Melihat invoice/retur yang masuk perhitungan |
+| **Transactions** | Melihat invoice, transaksi POS, dan retur yang masuk perhitungan |
 | **Sales Branches** | Mengatur cabang sales |
 | **FTE Designations** | Mengatur bobot role seperti Lead, Team, Support |
 | **Rules & Tiers** | Mengatur skema tier dan rate insentif |
@@ -73,10 +75,12 @@ Secara sederhana, proses bulanan adalah:
 3. Isi target cabang
 4. Jalankan cascade target ke masing-masing sales
 5. Pastikan invoice sudah dibuat, diposting, dan status pembayaran benar
-6. Jalankan perhitungan insentif
-7. Review hasil payout
-8. Approve hasil payout
-9. Lock periode jika sudah final
+   - Untuk order yang punya project, pastikan orang dan persen komisi di project sudah benar
+6. Pastikan sesi POS bulan tersebut sudah ditutup dan kasir di setiap order sudah benar
+7. Jalankan perhitungan insentif
+8. Review hasil payout
+9. Approve hasil payout
+10. Lock periode jika sudah final
 
 Setelah periode di-lock, angka payout tidak bisa diubah lagi.
 
@@ -103,6 +107,7 @@ Isi data berikut:
 ### Catatan Penting
 
 - Sales harus terhubung ke user Odoo agar dapat melihat menu **My Incentive**.
+- Sales yang berjualan di POS wajib memiliki **Sales Branch**. Jika kosong, transaksi POS miliknya tidak akan tercatat di insentif. Setup POS lengkapnya ada di bagian **Transaksi dari POS**.
 - Role **Support** tidak mendapat target individual, tetapi tetap bisa mendapat branch payout.
 - Karyawan yang sudah resign sebelum periode berjalan tidak ikut perhitungan tim bulan tersebut.
 - Jika karyawan resign di tengah bulan, targetnya dihitung prorata sesuai hari aktif.
@@ -248,7 +253,7 @@ Invoice akan masuk perhitungan jika:
 
 - Invoice sudah **Posted**
 - Invoice adalah invoice customer
-- Invoice memiliki salesperson / incentive salesperson yang benar
+- Invoice memiliki project yang benar (lihat bagian 13), atau jika tanpa project, memiliki salesperson / incentive salesperson yang benar
 - Invoice berada di periode yang sesuai
 
 Namun payout hanya dibayarkan jika invoice sudah **lunas**.
@@ -269,7 +274,215 @@ Invoice baru dihitung saat sudah lunas.
 
 ---
 
-## 13. Down Payment Invoice
+## 13. Pembagian Komisi per Project
+
+Kredit penjualan **tidak otomatis 100% ke salesperson di Sales Order**. Sistem mengecek dulu **Project** yang terpasang di Sales Order.
+
+Jika Sales Order punya project, kredit dibagi ke orang-orang yang ada di project tersebut sesuai persen komisinya.
+
+### 13.1 Data yang Diisi di Project
+
+Buka **Project**, pilih project, lalu isi:
+
+| Field | Penjelasan |
+|---|---|
+| **Project Manager** | PM project |
+| **Salesperson 2** | Sales kedua yang ikut di project |
+| **Salesperson 3** | Sales ketiga yang ikut di project |
+| **Komisi PM** | Persen bagian PM |
+| **Komisi Salesperson 2** | Persen bagian Salesperson 2 |
+| **Komisi Salesperson 3** | Persen bagian Salesperson 3 |
+
+Total ketiga persen sebaiknya **100%**.
+
+Setiap orang di project harus memiliki data **Employee** yang terhubung ke user-nya dan sudah diisi tab **Sales Incentive** (lihat bagian 5).
+
+### 13.2 Contoh
+
+Project **ABORE LIVING**:
+
+| Posisi | Orang | Komisi |
+|---|---|---:|
+| Project Manager | Agus Dwipayana | 20% |
+| Salesperson 2 | Aditya Rachman | 40% |
+| Salesperson 3 | Bagus Prasetyo | 40% |
+
+Invoice dari project ini senilai **100 juta**. Maka:
+
+| Orang | Kredit Penjualan |
+|---|---:|
+| Agus Dwipayana | 20 juta |
+| Aditya Rachman | 40 juta |
+| Bagus Prasetyo | 40 juta |
+
+Nilai ini dipakai untuk **achievement/tier** dan juga untuk **payout** masing-masing orang.
+
+### 13.3 Salesperson di Sales Order Tidak Ada di Project
+
+Jika salesperson di Sales Order **tidak** tercantum di project (bukan PM, bukan Salesperson 2, bukan Salesperson 3), maka **salesperson tersebut tidak mendapat komisi** dari transaksi itu.
+
+Komisinya masuk ke orang-orang yang ada di project.
+
+Jika salesperson tersebut memang ikut menangani project, tambahkan dia di project sebagai Salesperson 2 atau 3, lalu jalankan **Calculate** ulang.
+
+### 13.4 Aturan Khusus
+
+| Kondisi di Project | Hasil |
+|---|---|
+| Semua persen komisi kosong / 0 | PM mendapat **100%** |
+| Persen diisi, tapi orangnya kosong (contoh: Komisi Salesperson 3 = 100% tapi Salesperson 3 kosong) | Porsi tersebut **dialihkan ke PM** |
+| Total persen kurang dari 100% | Sisanya **dialihkan ke PM** |
+| Total persen lebih dari 100% | Dibagi ulang secara proporsional agar totalnya 100% |
+| Satu orang mengisi dua posisi | Persennya dijumlahkan |
+| Orang di project tidak punya data Employee | Porsinya dialihkan ke PM |
+
+### 13.5 Invoice Tanpa Project
+
+Jika Sales Order tidak punya project (atau invoice dibuat manual, atau invoice dari POS), sistem memakai cara lama:
+
+- **Incentive Salesperson** di invoice mendapat **100%**
+- Untuk invoice dari POS, Incentive Salesperson adalah kasirnya (lihat bagian 14)
+
+Catatan: field **Incentive Salesperson** di invoice hanya berpengaruh untuk invoice **tanpa project**. Untuk invoice dengan project, pembagian selalu mengikuti data project.
+
+### 13.6 Jika Data Project Diubah
+
+Jika PM, Salesperson 2/3, atau persen komisi di project diubah:
+
+1. Simpan perubahan di project
+2. Jalankan **Calculate** ulang di periode yang belum di-Lock
+
+Sistem akan menyesuaikan pembagian dan menghapus kredit orang yang sudah tidak ada di project.
+
+Periode yang sudah di-**Lock** tidak berubah.
+
+### 13.7 Refund / Credit Note pada Invoice Project
+
+Refund dari invoice project juga dibagi dengan persen yang sama.
+
+Contoh: invoice project 100 juta (PM 25%, Salesperson 2 75%) lalu dibuat credit note 10 juta. Maka kredit PM berkurang 2,5 juta dan Salesperson 2 berkurang 7,5 juta.
+
+Saat memakai tombol **Create Credit Note / Refund** dari menu Transactions, nilai yang diisi adalah nilai refund **untuk seluruh baris invoice**, bukan hanya bagian satu orang. Sistem akan membagikannya otomatis.
+
+### 13.8 Cara Mengecek Pembagian
+
+1. Buka **Sales Incentive → Transactions**
+2. Gunakan **Group By → Project** untuk melihat transaksi per project
+3. Perhatikan kolom:
+
+| Kolom | Arti |
+|---|---|
+| **Project** | Project asal transaksi |
+| **Credit Role** | Posisi orang tersebut: Project Manager, Salesperson 2, Salesperson 3, atau Salesperson / Cashier (jika tanpa project) |
+| **Share** | Persen bagian orang tersebut |
+| **Line Amount** | Nilai kredit yang sudah dikalikan persen |
+
+Satu baris invoice bisa muncul lebih dari satu kali di menu Transactions, sekali untuk setiap orang di project.
+
+---
+
+## 14. Transaksi dari POS (Point of Sale)
+
+Selain dari Sales Order dan Invoice, penjualan di **POS** juga masuk ke perhitungan insentif.
+
+Bedanya, di POS tidak ada kolom salesperson. Sistem memakai **Cashier (Employee)**, yaitu karyawan yang sedang login di layar kasir saat order dibuat. Karyawan inilah yang mendapat kredit penjualan di insentif.
+
+### 14.1 Setup POS (sekali saja, oleh Admin)
+
+Agar kasir bisa tercatat per karyawan, POS harus memakai login karyawan.
+
+1. Buka **Point of Sale → Configuration → Settings**
+2. Pilih POS yang digunakan (misalnya Toko Jakarta)
+3. Di bagian **PoS Interface**, centang **Log in with Employees**
+4. Klik **Save**, lalu buka halaman ini lagi
+5. Tambahkan karyawan sales yang boleh memakai POS tersebut di daftar employee (**Advanced rights**, **Basic rights**, atau **Minimal rights** sesuai kebutuhan)
+6. Klik **Save**
+
+Lalu untuk setiap karyawan sales yang berjualan di POS:
+
+1. Buka **Employees**, pilih karyawan
+2. Di tab **HR Settings**, isi **PIN Code** (dan/atau **Badge ID**) untuk login di POS
+3. Di tab **Sales Incentive**, pastikan **Sales Branch**, **Business Type**, dan **FTE Designation** sudah terisi (sama seperti bagian 5)
+
+> Jika **Log in with Employees** tidak diaktifkan, order POS tidak punya data kasir per karyawan sehingga tidak bisa masuk ke insentif siapa pun.
+
+### 14.2 Cara Berjualan di POS agar Tercatat
+
+1. Buka sesi POS
+2. Di layar login POS, sales memilih namanya sendiri lalu memasukkan PIN (atau scan badge)
+3. Lakukan transaksi seperti biasa sampai pembayaran selesai
+4. Jika sales lain bergantian memakai kasir yang sama, **ganti kasir terlebih dahulu** (klik nama kasir di pojok layar POS → pilih karyawan lain → masukkan PIN)
+5. Di akhir hari, tutup sesi POS
+
+Penting: penjualan dicatat atas nama **siapa yang sedang login di kasir**, bukan siapa yang membuka sesi. Jika sales A melayani customer tetapi yang login adalah sales B, maka insentifnya masuk ke sales B.
+
+### 14.3 Order POS yang Masuk Perhitungan
+
+Order POS akan masuk perhitungan jika:
+
+- Order sudah dibayar (status **Paid**, **Posted**, atau **Invoiced**)
+- Tanggal order berada di dalam periode insentif
+- Order memiliki **Cashier** (employee)
+- Cashier tersebut sudah memiliki **Sales Branch**
+- Order berasal dari company yang sama dengan periode insentif
+
+Transaksi POS diambil otomatis saat Finance/Admin klik **Calculate** di periode insentif. Tidak ada langkah tambahan.
+
+### 14.4 Perbedaan POS dengan Invoice Biasa
+
+| Hal | Invoice Biasa | POS |
+|---|---|---|
+| Siapa yang dapat kredit | Salesperson / Incentive Salesperson di invoice | Cashier yang login saat order dibuat |
+| Kapan dianggap lunas | Saat invoice sudah lunas | Langsung, karena customer sudah bayar di kasir |
+| Periode payout | Periode saat invoice lunas | Periode yang sama dengan tanggal order |
+| Partial payment | Belum masuk payout | Tidak ada (POS selalu bayar penuh) |
+| Down Payment | Ada perlakuan khusus | Tidak ada DP di POS |
+| Batas diskon 35% per baris | Berlaku | Berlaku |
+
+### 14.5 Order POS yang Diminta Invoice
+
+Jika customer minta invoice di POS (tombol **Invoice** saat pembayaran), sistem akan membuat invoice dari order tersebut.
+
+Dalam kasus ini:
+
+- Order dihitung **lewat invoice-nya**, bukan sebagai transaksi POS, sehingga tidak dihitung dua kali
+- **Incentive Salesperson** di invoice otomatis diisi dengan **Cashier** dari order POS
+- Aturan invoice biasa berlaku (harus Posted dan lunas)
+
+### 14.6 Retur di POS
+
+Jika ada retur/refund barang di POS, order retur tersebut akan mengurangi penjualan kasir yang mencatat retur.
+
+Karena itu, sebaiknya retur diproses oleh kasir (login) yang sama dengan penjualan awal, agar pengurangan masuk ke sales yang benar.
+
+### 14.7 Cara Mengecek Transaksi POS
+
+**Dari menu Transactions**
+
+1. Buka **Sales Incentive → Transactions**
+2. Gunakan filter **From POS** untuk melihat transaksi POS saja (atau **From Invoice** untuk invoice saja)
+3. Gunakan **Group By → Source Type** untuk melihat total per sumber
+4. Kolom **POS Order** menunjukkan nomor order POS asal
+
+**Dari order POS**
+
+1. Buka **Point of Sale → Orders → Orders**
+2. Buka order yang ingin dicek
+3. Di bawah kolom **Cashier**, akan muncul daftar transaksi insentif dari order tersebut (periode, nilai, status)
+
+Jika daftar ini tidak muncul setelah **Calculate**, berarti order belum masuk perhitungan. Cek kembali syarat di bagian 14.3.
+
+### 14.8 Salah Kasir, Bagaimana?
+
+Jika order tercatat atas nama kasir yang salah, laporkan ke Finance/Admin **sebelum** periode di-**Lock**.
+
+Admin cukup memperbaiki **Cashier** di order POS tersebut, lalu klik **Calculate** ulang di periode insentif. Sistem akan memindahkan transaksi ke kasir yang benar dan menghapus transaksi lama atas nama kasir yang salah.
+
+Catatan: jika periode sudah di-**Lock**, transaksi yang sudah dibayarkan tidak berubah lagi. Koreksi dilakukan di periode berikutnya.
+
+---
+
+## 15. Down Payment Invoice
 
 Down Payment atau DP memiliki perlakuan khusus.
 
@@ -291,7 +504,7 @@ Maka:
 
 ---
 
-## 14. Diskon Invoice
+## 16. Diskon Invoice
 
 Baris invoice dengan diskon lebih dari batas yang ditentukan tidak masuk payout.
 
@@ -309,7 +522,7 @@ Penting: pengecekan diskon dilakukan per baris invoice, bukan per invoice secara
 
 ---
 
-## 15. Tier Insentif
+## 17. Tier Insentif
 
 Tier menentukan rate payout yang digunakan.
 
@@ -333,9 +546,9 @@ Untuk skema Jan–Jun, aturan flat rate berlaku:
 
 ---
 
-## 16. Menjalankan Perhitungan Insentif
+## 18. Menjalankan Perhitungan Insentif
 
-Setelah target dan invoice siap, buka:
+Setelah target, invoice, dan transaksi POS siap, buka:
 
 **Sales Incentive → Incentive Periods**
 
@@ -348,6 +561,7 @@ Sistem akan menghitung:
 - Tier
 - Invoice yang eligible
 - Invoice yang sudah lunas
+- Transaksi POS di periode tersebut
 - Incentive payout
 - Bonus payout
 - Branch payout
@@ -357,7 +571,7 @@ Setelah selesai, status periode menjadi **Calculated**.
 
 ---
 
-## 17. Membaca Hasil Payout
+## 19. Membaca Hasil Payout
 
 Buka menu:
 
@@ -386,7 +600,7 @@ Total Payout = Incentive Payout + Bonus Payout + Branch Payout
 
 ---
 
-## 18. Penjelasan Komponen Payout
+## 20. Penjelasan Komponen Payout
 
 ### Incentive Payout
 
@@ -413,7 +627,7 @@ Ini adalah total keseluruhan yang menjadi nilai payout final.
 
 ---
 
-## 19. Approve dan Lock
+## 21. Approve dan Lock
 
 Setelah payout dicek dan benar, Finance/Admin dapat melanjutkan proses.
 
@@ -437,7 +651,7 @@ Gunakan **Lock** hanya jika angka benar-benar sudah final.
 
 ---
 
-## 20. Jika Ada Karyawan Resign
+## 22. Jika Ada Karyawan Resign
 
 Jika karyawan resign:
 
@@ -460,7 +674,7 @@ Sisa target akan dialihkan sesuai aturan redistribusi.
 
 ---
 
-## 21. Jika Ada Karyawan Baru
+## 23. Jika Ada Karyawan Baru
 
 Jika karyawan baru masuk di tengah bulan:
 
@@ -482,7 +696,7 @@ Targetnya akan mengikuti 14/31 dari porsi normal.
 
 ---
 
-## 22. Jika Ada Posisi Kosong / Vacant
+## 24. Jika Ada Posisi Kosong / Vacant
 
 Jika ada posisi yang belum terisi, user bisa membuat record employee sebagai **Vacant Position**.
 
@@ -492,7 +706,7 @@ Porsi posisi kosong dapat dialihkan ke tim aktif sebagai bonus jika opsi **Redis
 
 ---
 
-## 23. Population Changed / Perlu Re-Cascade
+## 25. Population Changed / Perlu Re-Cascade
 
 Kadang sistem memberi tanda bahwa komposisi tim berubah.
 
@@ -511,7 +725,7 @@ Tujuannya agar payout tidak dihitung dari target lama yang sudah tidak sesuai.
 
 ---
 
-## 24. Refund / Retur
+## 26. Refund / Retur
 
 Jika ada refund atau credit note, sistem akan mengurangi dasar perhitungan insentif.
 
@@ -529,7 +743,7 @@ Jika credit note dibuat manual tanpa hubungan ke invoice asal, user perlu berhat
 
 ---
 
-## 25. Kasus yang Sering Ditanyakan
+## 27. Kasus yang Sering Ditanyakan
 
 ### Kenapa payout 0 padahal ada sales?
 
@@ -541,6 +755,8 @@ Kemungkinan penyebab:
 - Diskon baris invoice lebih dari 35%
 - Karyawan belum punya target di periode tersebut
 - Salesperson di invoice belum benar
+- Invoice punya project, dan salesperson tersebut tidak tercantum di project
+- Untuk POS: sales tidak login atas namanya sendiri di kasir, atau belum punya Sales Branch
 
 ### Kenapa invoice partial tidak masuk payout?
 
@@ -562,6 +778,32 @@ Lock digunakan untuk memastikan angka payout final dan tidak berubah lagi.
 
 Tidak. Jika ada koreksi setelah lock, koreksi dilakukan di periode berikutnya.
 
+### Kenapa saya yang buat Sales Order, tapi komisinya masuk ke orang lain?
+
+Karena Sales Order tersebut punya project, dan komisi dibagi ke orang-orang yang ada di project (PM, Salesperson 2, Salesperson 3). Jika Anda tidak tercantum di project, Anda tidak mendapat bagian. Minta Admin menambahkan Anda di project jika memang ikut menangani.
+
+### Kenapa satu invoice muncul beberapa kali di Transactions?
+
+Karena invoice tersebut dari project yang dibagi ke beberapa orang. Setiap orang mendapat satu baris sesuai persennya.
+
+### Kenapa penjualan POS saya tidak masuk insentif?
+
+Kemungkinan penyebab:
+
+- POS belum mengaktifkan **Log in with Employees**
+- Saat transaksi, yang login di kasir adalah karyawan lain
+- Data karyawan belum diisi **Sales Branch**
+- Tanggal order di luar periode yang dihitung
+- **Calculate** belum dijalankan ulang setelah transaksi terjadi
+
+### Kenapa transaksi POS langsung masuk payout, tidak menunggu lunas?
+
+Karena di POS customer sudah membayar penuh di kasir. Jadi transaksi POS langsung dianggap lunas di bulan order tersebut.
+
+### Order POS saya ada invoice-nya, apakah dihitung dua kali?
+
+Tidak. Order POS yang dibuatkan invoice hanya dihitung lewat invoice-nya.
+
 ### Kenapa sales tidak bisa melihat My Incentive?
 
 Kemungkinan data employee belum terhubung ke user Odoo.
@@ -577,7 +819,7 @@ Kemungkinan:
 
 ---
 
-## 26. Checklist Sebelum Calculate
+## 28. Checklist Sebelum Calculate
 
 Sebelum klik **Calculate**, pastikan:
 
@@ -589,12 +831,15 @@ Sebelum klik **Calculate**, pastikan:
 - Tidak ada warning perubahan tim
 - Invoice sudah Posted
 - Invoice memiliki salesperson yang benar
+- Project di Sales Order sudah berisi PM, Salesperson 2/3, dan persen komisi yang benar (total 100%)
 - Payment status invoice sudah benar
 - Refund/credit note sudah dibuat dengan benar
+- Semua sesi POS di periode tersebut sudah ditutup
+- Order POS tercatat atas nama kasir (sales) yang benar
 
 ---
 
-## 27. Checklist Sebelum Lock
+## 29. Checklist Sebelum Lock
 
 Sebelum klik **Lock**, pastikan:
 
@@ -610,7 +855,7 @@ Setelah lock, angka dianggap final.
 
 ---
 
-## 28. Ringkasan Proses Cepat
+## 30. Ringkasan Proses Cepat
 
 ```text
 1. Setup karyawan
@@ -618,15 +863,16 @@ Setelah lock, angka dianggap final.
 3. Isi branch target
 4. Cascade target
 5. Pastikan invoice dan pembayaran benar
-6. Calculate
-7. Review payout
-8. Approve
-9. Lock
+6. Pastikan sesi POS sudah ditutup dan kasir benar
+7. Calculate
+8. Review payout
+9. Approve
+10. Lock
 ```
 
 ---
 
-## 29. Catatan untuk User
+## 31. Catatan untuk User
 
 - Jangan langsung lock jika angka belum direview.
 - Jika ada resign/new hire, selalu lakukan cascade ulang.
@@ -634,15 +880,17 @@ Setelah lock, angka dianggap final.
 - Jika menggunakan DP, payout baru muncul saat final invoice lunas.
 - Jika ada refund, pastikan credit note dibuat dari invoice asal.
 - Jika ada perubahan data karyawan, jalankan ulang cascade dan calculate.
+- Jika ada perubahan orang atau persen komisi di project, jalankan ulang calculate.
+- Di POS, selalu login dengan nama dan PIN sendiri sebelum melayani customer.
 
 ---
 
-## 30. Penutup
+## 32. Penutup
 
 Modul **VIF Sales Incentive** membantu menghitung insentif dengan lebih rapi, transparan, dan dapat diaudit.
 
 Kunci utama penggunaan modul ini adalah mengikuti urutan proses:
 
-**Target benar → Invoice benar → Payment benar → Calculate → Review → Approve → Lock**
+**Target benar → Project & Invoice & POS benar → Payment benar → Calculate → Review → Approve → Lock**
 
 Jika urutan ini diikuti, hasil payout akan lebih mudah diperiksa dan lebih aman untuk digunakan sebagai dasar pembayaran insentif.

@@ -11,6 +11,10 @@ class IncentiveTransactionRefund(models.Model):
 
     The refund amount is editable but capped at the line's remaining
     refundable amount (invoice line amount minus what was already refunded).
+
+    Amounts are for the WHOLE invoice line, even when the line is split
+    between several people on a project: the credit note refunds the line,
+    and posting it hands every person their own share of the reversal.
     """
     # ponytail: regular model, not TransientModel -- Odoo Studio (Online) only
     # works on regular models. Rows are the refund log; keeping them is a
@@ -29,7 +33,7 @@ class IncentiveTransactionRefund(models.Model):
         related='transaction_id.employee_id', readonly=True)
     base_amount = fields.Monetary(
         string='Invoice Line Amount', currency_field='currency_id',
-        readonly=True, related='transaction_id.base_amount')
+        readonly=True, compute='_compute_base_amount')
     refundable_amount = fields.Monetary(
         string='Refundable', currency_field='currency_id', readonly=True,
         compute='_compute_refundable_amount')
@@ -43,11 +47,19 @@ class IncentiveTransactionRefund(models.Model):
              "one cannot be refunded again.")
 
     @api.depends('transaction_id')
+    def _compute_base_amount(self):
+        for wizard in self:
+            wizard.base_amount = sum(
+                wizard.transaction_id._line_split_transactions().mapped(
+                    'base_amount')) if wizard.transaction_id else 0.0
+
+    @api.depends('transaction_id')
     def _compute_refundable_amount(self):
         for wizard in self:
-            wizard.refundable_amount = (
-                wizard.transaction_id._refundable_amount()
-                if wizard.transaction_id else 0.0)
+            wizard.refundable_amount = sum(
+                tx._refundable_amount()
+                for tx in wizard.transaction_id._line_split_transactions()
+            ) if wizard.transaction_id else 0.0
 
     def _check_refund_amount(self):
         for wizard in self:
@@ -80,11 +92,12 @@ class IncentiveTransactionRefund(models.Model):
         # (see account.move._create_incentive_refund_transactions), so no
         # separate reversal is created here.
         self.refund_move_id = self._create_credit_note()
-        # A full refund closes the original transaction.
+        # A full refund closes the original transaction -- every share of
+        # the line when it is split on a project.
         if float_compare(
                 self.refund_amount, self.refundable_amount,
                 precision_rounding=self.currency_id.rounding) >= 0:
-            self.transaction_id.state = 'reversed'
+            self.transaction_id._line_split_transactions().state = 'reversed'
         return {'type': 'ir.actions.act_window_close'}
 
     def _create_credit_note(self):
