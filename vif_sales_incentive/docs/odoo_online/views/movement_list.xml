@@ -1,0 +1,11 @@
+<list string="Target Movements">
+    <field name="x_name"/>
+    <field name="x_period_id"/>
+    <field name="x_reason"/>
+    <field name="x_from_employee_id"/>
+    <field name="x_to_employee_id"/>
+    <field name="x_target_type"/>
+    <field name="x_amount"/>
+    <field name="x_target_id"/>
+    <field name="x_currency_id" column_invisible="1"/>
+</list>

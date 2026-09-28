@@ -1,0 +1,7 @@
+<list string="Incentive Periods">
+    <field name="x_name"/>
+    <field name="x_date_start"/>
+    <field name="x_date_end"/>
+    <field name="x_rule_id"/>
+    <field name="x_state" widget="badge"/>
+</list>

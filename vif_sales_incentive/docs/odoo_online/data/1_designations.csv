@@ -1,0 +1,5 @@
+x_name,x_code,x_sequence,x_fte_branch,x_fte_individual,x_branch_eligible,x_individual_eligible,x_active
+Lead,LEAD,10,1.5,1.5,True,True,True
+Team,TEAM,20,1.0,1.0,True,True,True
+Support,SUPPORT,30,0.25,0.0,True,False,True
+Head,HEAD,40,2.0,1.0,True,True,True

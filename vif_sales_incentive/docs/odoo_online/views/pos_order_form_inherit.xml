@@ -1,0 +1,20 @@
+<!-- Inherited view: Model = Point of Sale Orders (pos.order),
+     Inherited View = point_of_sale.view_pos_pos_form ("pos.order.form") -->
+<data>
+    <xpath expr="//notebook" position="inside">
+        <page string="Incentive" name="x_incentive">
+            <field name="x_incentive_transaction_ids" readonly="1">
+                <list>
+                    <field name="x_employee_id"/>
+                    <field name="x_source_period_id"/>
+                    <field name="x_transaction_type"/>
+                    <field name="x_base_amount"/>
+                    <field name="x_reversal_of_id"/>
+                    <field name="x_payout_amount"/>
+                    <field name="x_state"/>
+                    <field name="x_currency_id" column_invisible="1"/>
+                </list>
+            </field>
+        </page>
+    </xpath>
+</data>

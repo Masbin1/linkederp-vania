@@ -1,0 +1,12 @@
+<list string="Branch Targets">
+    <field name="x_period_id"/>
+    <field name="x_branch_id"/>
+    <field name="x_business_type"/>
+    <field name="x_amount"/>
+    <field name="x_carry_forward_amount"/>
+    <field name="x_amount_total"/>
+    <field name="x_payout_total"/>
+    <field name="x_needs_recascade"/>
+    <field name="x_state" widget="badge"/>
+    <field name="x_currency_id" column_invisible="1"/>
+</list>

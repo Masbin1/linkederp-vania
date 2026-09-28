@@ -1,0 +1,26 @@
+<!-- Inherited view: Model = Journal Entry (account.move),
+     Inherited View = account.view_move_form ("account.move.form") -->
+<data>
+    <xpath expr="//field[@name='invoice_user_id']" position="after">
+        <field name="x_incentive_employee_id"
+               invisible="move_type not in ('out_invoice', 'out_refund')"/>
+    </xpath>
+    <xpath expr="//notebook" position="inside">
+        <page string="Incentive" name="x_incentive"
+              invisible="move_type not in ('out_invoice', 'out_refund')">
+            <field name="x_incentive_transaction_ids" readonly="1">
+                <list>
+                    <field name="x_employee_id"/>
+                    <field name="x_split_role"/>
+                    <field name="x_split_share" widget="percentage"/>
+                    <field name="x_source_period_id"/>
+                    <field name="x_base_amount"/>
+                    <field name="x_is_payment_eligible"/>
+                    <field name="x_payout_amount"/>
+                    <field name="x_state"/>
+                    <field name="x_currency_id" column_invisible="1"/>
+                </list>
+            </field>
+        </page>
+    </xpath>
+</data>

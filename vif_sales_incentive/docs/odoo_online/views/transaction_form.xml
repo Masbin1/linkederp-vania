@@ -1,0 +1,57 @@
+<form string="Incentive Transaction" create="0">
+    <header>
+        <button name="[ID VIF: Transaction Refund]" type="action"
+                string="Create Credit Note / Refund"
+                invisible="x_transaction_type != 'invoice' or x_source_type != 'invoice' or x_state != 'confirmed'"/>
+        <field name="x_state" widget="statusbar"/>
+    </header>
+    <sheet>
+        <div class="oe_title"><h1><field name="x_name" readonly="1"/></h1></div>
+        <group>
+            <group string="Source">
+                <field name="x_source_type" readonly="1"/>
+                <field name="x_move_id" readonly="1" invisible="x_source_type != 'invoice'"/>
+                <field name="x_pos_order_id" readonly="1" invisible="x_source_type != 'pos'"/>
+                <field name="x_partner_id" readonly="1"/>
+                <field name="x_product_id" readonly="1"/>
+                <field name="x_transaction_type" readonly="1"/>
+            </group>
+            <group string="Credit">
+                <field name="x_employee_id" readonly="1"/>
+                <field name="x_project_id" readonly="1"/>
+                <field name="x_split_role" readonly="1"/>
+                <field name="x_split_share" readonly="1" widget="percentage"/>
+                <field name="x_branch_id" readonly="1"/>
+                <field name="x_business_type" readonly="1"/>
+            </group>
+            <group string="Periods">
+                <field name="x_source_period_id" readonly="1"/>
+                <field name="x_payment_period_id" readonly="1"/>
+                <field name="x_invoice_date" readonly="1"/>
+                <field name="x_payment_date" readonly="1"/>
+                <field name="x_is_prior_period" readonly="1"/>
+            </group>
+            <group string="Eligibility">
+                <field name="x_base_amount" readonly="1"/>
+                <field name="x_discount" readonly="1"/>
+                <field name="x_is_downpayment" readonly="1"/>
+                <field name="x_is_discount_eligible" readonly="1"/>
+                <field name="x_is_payment_eligible" readonly="1"/>
+                <field name="x_eligibility_note" readonly="1"/>
+            </group>
+            <group string="Payout (frozen snapshot)">
+                <field name="x_bucket" readonly="1"/>
+                <field name="x_incentive_alloc" readonly="1"/>
+                <field name="x_bonus_alloc" readonly="1"/>
+                <field name="x_tier_id" readonly="1"/>
+                <field name="x_tier_payout_rate" readonly="1"/>
+                <field name="x_payout_amount" readonly="1"/>
+                <field name="x_currency_id" invisible="1"/>
+            </group>
+            <group string="Adjustment Trail">
+                <field name="x_reversal_of_id" readonly="1"/>
+                <field name="x_reversal_ids" readonly="1" widget="many2many_tags"/>
+            </group>
+        </group>
+    </sheet>
+</form>

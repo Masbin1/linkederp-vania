@@ -1,0 +1,3 @@
+x_name,x_date_from,x_date_to,x_base_rate,x_bonus_rate,x_max_discount,x_cap_tier_in_mixed,x_mixed_cap_tier_level,x_active
+Incentive Scheme 2H 2025,2025-07-01,2025-12-31,0.0075,0.01,35.0,True,4,True
+Incentive Scheme 1H 2026 (Flat Rate),2026-01-01,2026-06-30,0.0075,0.01,35.0,True,4,True

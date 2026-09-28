@@ -1,0 +1,73 @@
+<form string="Incentive Period">
+    <header>
+        <button name="[ID VIF: Period Open]" type="action" string="Open" class="btn-primary"
+                invisible="x_state != 'draft'"/>
+        <button name="[ID VIF: Engine Calculate]" type="action" string="Calculate" class="btn-primary"
+                invisible="x_state not in ('open', 'calculated')"/>
+        <button name="[ID VIF: Period Approve]" type="action" string="Approve"
+                invisible="x_state != 'calculated'"/>
+        <button name="[ID VIF: Period Lock]" type="action" string="Lock"
+                invisible="x_state != 'approved'"
+                confirm="Lock this period? Payout figures become final."/>
+        <button name="[ID VIF: Period Reset to Open]" type="action" string="Reset to Open"
+                invisible="x_state not in ('calculated', 'approved')"/>
+        <button name="[ID VIF: Period Generate Next]" type="action" string="Generate Next Period"/>
+        <field name="x_state" widget="statusbar"/>
+    </header>
+    <sheet>
+        <div class="oe_title"><h1><field name="x_name" placeholder="Sep 2026"/></h1></div>
+        <group>
+            <group>
+                <field name="x_date_start"/>
+                <field name="x_date_end"/>
+            </group>
+            <group>
+                <field name="x_rule_id"/>
+                <field name="x_company_id"/>
+            </group>
+        </group>
+        <notebook>
+            <page string="Branch Targets">
+                <field name="x_branch_target_ids">
+                    <list>
+                        <field name="x_branch_id"/>
+                        <field name="x_business_type"/>
+                        <field name="x_amount_total"/>
+                        <field name="x_payout_total"/>
+                        <field name="x_needs_recascade"/>
+                        <field name="x_state" widget="badge"/>
+                        <field name="x_currency_id" column_invisible="1"/>
+                    </list>
+                </field>
+            </page>
+            <page string="Targets">
+                <field name="x_target_ids" readonly="1">
+                    <list>
+                        <field name="x_employee_id"/>
+                        <field name="x_branch_id"/>
+                        <field name="x_target_type"/>
+                        <field name="x_amount" sum="Total"/>
+                        <field name="x_source"/>
+                        <field name="x_currency_id" column_invisible="1"/>
+                    </list>
+                </field>
+            </page>
+            <page string="Payouts">
+                <field name="x_payout_ids" readonly="1">
+                    <list>
+                        <field name="x_employee_id"/>
+                        <field name="x_branch_id"/>
+                        <field name="x_net_sales"/>
+                        <field name="x_achievement_pct" widget="percentage"/>
+                        <field name="x_tier_id"/>
+                        <field name="x_incentive_payout" sum="Total"/>
+                        <field name="x_payout_bonus" sum="Total"/>
+                        <field name="x_branch_payout" sum="Total"/>
+                        <field name="x_total_payout" sum="Total"/>
+                        <field name="x_currency_id" column_invisible="1"/>
+                    </list>
+                </field>
+            </page>
+        </notebook>
+    </sheet>
+</form>

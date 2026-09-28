@@ -1,0 +1,26 @@
+<form string="Target Movement">
+    <header>
+        <button name="[ID VIF: Target Movement Apply]" type="action" string="Apply"
+                class="btn-primary" invisible="x_target_id"/>
+    </header>
+    <sheet>
+        <div class="oe_title"><h1><field name="x_name" readonly="1"/></h1></div>
+        <group>
+            <group>
+                <field name="x_period_id"/>
+                <field name="x_reason"/>
+                <field name="x_from_employee_id"/>
+                <field name="x_to_employee_id"/>
+            </group>
+            <group>
+                <field name="x_target_type"/>
+                <field name="x_amount"/>
+                <field name="x_fte_share"/>
+                <field name="x_date_effective"/>
+                <field name="x_target_id" readonly="1"/>
+                <field name="x_currency_id" invisible="1"/>
+            </group>
+        </group>
+        <field name="x_note" placeholder="Note..."/>
+    </sheet>
+</form>

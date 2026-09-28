@@ -1,0 +1,23 @@
+<!-- Inherited view: Model = Employee (hr.employee),
+     Inherited View = hr.view_employee_form ("hr.employee.form") -->
+<data>
+    <xpath expr="//notebook" position="inside">
+        <page string="Sales Incentive" name="x_sales_incentive">
+            <group>
+                <group string="Team">
+                    <field name="x_incentive_branch_id"/>
+                    <field name="x_incentive_business_type"/>
+                    <field name="x_incentive_designation_id"/>
+                    <field name="x_is_vacant_slot"/>
+                    <field name="x_is_global_branch_member"/>
+                </group>
+                <group string="Dates">
+                    <field name="x_incentive_date_start"/>
+                    <field name="x_incentive_date_end"/>
+                    <field name="x_branch_incentive_eligible"/>
+                    <field name="x_individual_incentive_eligible"/>
+                </group>
+            </group>
+        </page>
+    </xpath>
+</data>

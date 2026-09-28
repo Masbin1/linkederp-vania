@@ -1,0 +1,35 @@
+<form string="Branch Target">
+    <header>
+        <button name="[ID VIF: Branch Target Calculate]" type="action" string="Calculate"
+                class="btn-primary" invisible="x_state not in ('draft', 'calculated')"/>
+        <button name="[ID VIF: Branch Target Approve]" type="action" string="Approve"
+                invisible="x_state != 'calculated'"/>
+        <button name="[ID VIF: Branch Target Lock]" type="action" string="Lock"
+                invisible="x_state != 'approved'"
+                confirm="Lock this branch? Its payouts become final."/>
+        <button name="[ID VIF: Branch Target Reset to Draft]" type="action" string="Reset to Draft"
+                invisible="x_state not in ('calculated', 'approved')"/>
+        <field name="x_state" widget="statusbar"/>
+    </header>
+    <sheet>
+        <div class="alert alert-warning" role="alert" invisible="not x_needs_recascade">
+            <strong>Population changed:</strong> <field name="x_recascade_reason" nolabel="1"/>
+            -- re-run the Cascade before calculating.
+        </div>
+        <field name="x_needs_recascade" invisible="1"/>
+        <group>
+            <group>
+                <field name="x_period_id"/>
+                <field name="x_branch_id"/>
+                <field name="x_business_type"/>
+            </group>
+            <group>
+                <field name="x_amount"/>
+                <field name="x_carry_forward_amount"/>
+                <field name="x_amount_total"/>
+                <field name="x_payout_total"/>
+                <field name="x_currency_id" invisible="1"/>
+            </group>
+        </group>
+    </sheet>
+</form>

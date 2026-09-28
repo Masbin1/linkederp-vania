@@ -1,0 +1,37 @@
+<form string="Cascade Branch Target">
+    <header>
+        <button name="[ID VIF: Cascade Preview]" type="action" string="Preview" class="btn-primary"/>
+        <button name="[ID VIF: Cascade Apply]" type="action" string="Apply"
+                confirm="Write these figures into the targets of this period?"/>
+    </header>
+    <sheet>
+        <group>
+            <group>
+                <field name="x_period_id"/>
+                <field name="x_branch_ids" widget="many2many_tags"/>
+                <field name="x_business_type"/>
+            </group>
+            <group>
+                <field name="x_scope"/>
+                <field name="x_redistribute_vacant"/>
+                <field name="x_overwrite_existing"/>
+                <field name="x_carry_forward_total"/>
+                <field name="x_currency_id" invisible="1"/>
+            </group>
+        </group>
+        <field name="x_line_ids" readonly="1">
+            <list>
+                <field name="x_branch_id"/>
+                <field name="x_employee_id"/>
+                <field name="x_designation_id"/>
+                <field name="x_fte"/>
+                <field name="x_proration"/>
+                <field name="x_base_amount" sum="Total"/>
+                <field name="x_carry_forward_amount" sum="Total"/>
+                <field name="x_incentive_amount" sum="Total"/>
+                <field name="x_bonus_amount" sum="Total"/>
+                <field name="x_currency_id" column_invisible="1"/>
+            </list>
+        </field>
+    </sheet>
+</form>
