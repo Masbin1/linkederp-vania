@@ -451,13 +451,18 @@ class IncentivePayout(models.Model):
 
         # Fill the incentive bucket first, then bonus -- allowing a single line
         # to SPLIT across the boundary. Order is CHRONOLOGICAL (invoice date,
-        # then id): an invoice booked later must never displace the allocation
-        # of one booked earlier. Sorting by amount instead would let a new,
-        # larger invoice grab the incentive bucket and retroactively push an
-        # already-calculated earlier invoice into the bonus bucket.
+        # then source line): an invoice booked later must never displace the
+        # allocation of one booked earlier. Sorting by amount instead would let
+        # a new, larger invoice grab the incentive bucket and retroactively push
+        # an already-calculated earlier invoice into the bonus bucket. The tie
+        # break is the invoice / POS line, not the transaction id: rows are
+        # recreated when a project split changes, and a new id must not move
+        # a same-day invoice from one bucket to the other.
         remaining_inc = elig_inc
         remaining_bon = elig_bon
-        for tx in eligible_tx.sorted(lambda t: (t.invoice_date or t.payment_date or _date.max, t.id)):
+        for tx in eligible_tx.sorted(lambda t: (
+                t.invoice_date or t.payment_date or _date.max,
+                t.move_line_id.id or t.pos_order_line_id.id or 0, t.id)):
             inc = min(tx.base_amount, remaining_inc)
             tx.incentive_alloc = inc
             remaining_inc -= inc
