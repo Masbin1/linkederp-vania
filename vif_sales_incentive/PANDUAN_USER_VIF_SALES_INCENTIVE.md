@@ -107,6 +107,7 @@ Isi data berikut:
 ### Catatan Penting
 
 - Sales harus terhubung ke user Odoo agar dapat melihat menu **My Incentive**.
+- Semua orang yang bisa mendapat kredit penjualan wajib punya **Sales Branch** dan **Business Type**. Ini termasuk salesperson di invoice, PM / Salesperson 2 / Salesperson 3 di project, dan kasir POS. Jika ada yang kosong, **Calculate** akan ditolak dan menyebutkan nama orangnya (lihat bagian 18).
 - Sales yang berjualan di POS wajib memiliki **Sales Branch**. Jika kosong, transaksi POS miliknya tidak akan tercatat di insentif. Setup POS lengkapnya ada di bagian **Transaksi dari POS**.
 - Role **Support** tidak mendapat target individual, tetapi tetap bisa mendapat branch payout.
 - Karyawan yang sudah resign sebelum periode berjalan tidak ikut perhitungan tim bulan tersebut.
@@ -297,6 +298,13 @@ Total ketiga persen sebaiknya **100%**.
 
 Setiap orang di project harus memiliki data **Employee** yang terhubung ke user-nya dan sudah diisi tab **Sales Incentive** (lihat bagian 5).
 
+Salesperson 2 dan Salesperson 3 hanya mendapat bagiannya jika:
+
+- sudah punya **Sales Branch** dan **Business Type**, **dan**
+- sudah punya **target** di periode invoice tersebut (hasil cascade target).
+
+Jika salah satu belum terpenuhi, bagiannya **dialihkan ke PM** (lihat 13.4).
+
 ### 13.2 Contoh
 
 Project **ABORE LIVING**:
@@ -317,6 +325,14 @@ Invoice dari project ini senilai **100 juta**. Maka:
 
 Nilai ini dipakai untuk **achievement/tier** dan juga untuk **payout** masing-masing orang.
 
+Jika **Bagus Prasetyo belum punya Sales Branch** (atau belum punya target di periode itu), bagian 40%-nya dialihkan ke PM:
+
+| Orang | Kredit Penjualan |
+|---|---:|
+| Agus Dwipayana (PM) | 60 juta (20% + 40% dari Bagus) |
+| Aditya Rachman | 40 juta |
+| Bagus Prasetyo | 0 |
+
 ### 13.3 Salesperson di Sales Order Tidak Ada di Project
 
 Jika salesperson di Sales Order **tidak** tercantum di project (bukan PM, bukan Salesperson 2, bukan Salesperson 3), maka **salesperson tersebut tidak mendapat komisi** dari transaksi itu.
@@ -335,6 +351,10 @@ Jika salesperson tersebut memang ikut menangani project, tambahkan dia di projec
 | Total persen lebih dari 100% | Dibagi ulang secara proporsional agar totalnya 100% |
 | Satu orang mengisi dua posisi | Persennya dijumlahkan |
 | Orang di project tidak punya data Employee | Porsinya dialihkan ke PM |
+| Salesperson 2 / 3 belum punya **Sales Branch** atau **Business Type** | Porsinya dialihkan ke PM |
+| Salesperson 2 / 3 belum punya **target** di periode invoice | Porsinya dialihkan ke PM |
+
+PM selalu mendapat bagiannya sendiri, walaupun PM belum punya branch atau target. Tetapi PM seperti itu tidak akan menghasilkan payout, dan **Calculate** akan menolak sampai data PM dilengkapi (lihat bagian 18).
 
 ### 13.5 Invoice Tanpa Project
 
@@ -347,7 +367,7 @@ Catatan: field **Incentive Salesperson** di invoice hanya berpengaruh untuk invo
 
 ### 13.6 Jika Data Project Diubah
 
-Jika PM, Salesperson 2/3, atau persen komisi di project diubah:
+Jika PM, Salesperson 2/3, atau persen komisi di project diubah, atau Sales Branch / target salah satu orangnya baru dilengkapi:
 
 1. Simpan perubahan di project
 2. Jalankan **Calculate** ulang di periode yang belum di-Lock
@@ -361,6 +381,8 @@ Periode yang sudah di-**Lock** tidak berubah.
 Refund dari invoice project juga dibagi dengan persen yang sama.
 
 Contoh: invoice project 100 juta (PM 25%, Salesperson 2 75%) lalu dibuat credit note 10 juta. Maka kredit PM berkurang 2,5 juta dan Salesperson 2 berkurang 7,5 juta.
+
+Pengecekan branch/target untuk credit note memakai **periode invoice asalnya**, bukan periode credit note. Jadi pembagian refund selalu sama dengan pembagian penjualan awalnya.
 
 Saat memakai tombol **Create Credit Note / Refund** dari menu Transactions, nilai yang diisi adalah nilai refund **untuk seluruh baris invoice**, bukan hanya bagian satu orang. Sistem akan membagikannya otomatis.
 
@@ -451,9 +473,24 @@ Dalam kasus ini:
 
 ### 14.6 Retur di POS
 
-Jika ada retur/refund barang di POS, order retur tersebut akan mengurangi penjualan kasir yang mencatat retur.
+Jika ada retur/refund barang di POS, sistem melakukan dua hal:
 
-Karena itu, sebaiknya retur diproses oleh kasir (login) yang sama dengan penjualan awal, agar pengurangan masuk ke sales yang benar.
+1. **Mengurangi net sales (achievement) kasir yang mencatat retur** pada periode retur dibuat.
+2. **Mengurangi dasar payout penjualan awalnya**, jika retur dibuat dari order asal (tombol **Refund** di POS lalu memilih order yang diretur). Payout hanya dihitung dari barang yang benar-benar dibeli customer.
+
+Contoh:
+
+- Order POS 10 barang × 148.000 = 1.480.000
+- Customer mengembalikan 5 barang (retur 740.000)
+- Net sales kasir berkurang 740.000
+- Dasar payout order tersebut menjadi 740.000
+
+Di menu **Transactions**, baris retur tampil sebagai **Credit Note / Refund** dengan nilai **minus**. Buka baris retur tersebut: field **Reversal Of** di bagian **Adjustment Trail** menunjukkan transaksi penjualan asalnya.
+
+Hal yang perlu diperhatikan:
+
+- Retur sebaiknya diproses oleh kasir (login) yang **sama** dengan penjualan awal. Jika berbeda, pengurangan net sales masuk ke kasir yang memproses retur.
+- Jika penjualan awal tidak tercatat di insentif (misalnya kasirnya belum punya Sales Branch), retur tetap mengurangi net sales kasir yang memproses retur.
 
 ### 14.7 Cara Mengecek Transaksi POS
 
@@ -568,6 +605,34 @@ Sistem akan menghitung:
 - Total payout
 
 Setelah selesai, status periode menjadi **Calculated**.
+
+### Calculate Ditolak karena Data Karyawan Belum Lengkap
+
+Sebelum menghitung payout, sistem mengecek semua orang yang mendapat kredit penjualan di periode tersebut. Orang-orang ini adalah salesperson invoice, PM / Salesperson 2 / Salesperson 3 project, dan kasir POS.
+
+Jika ada yang **tidak akan mendapat payout** karena datanya belum lengkap, Calculate ditolak dengan pesan seperti:
+
+```
+These people have sales in Sept 26 but would get no payout:
+
+- No Sales Branch / Business Type: Agus Dwipayana, yael@linkederp.com
+- No target in Sept 26: Yoppi Liehanto
+
+Fill in their employee incentive settings and run the target cascade, then calculate again.
+```
+
+Cara memperbaiki:
+
+| Pesan | Tindakan |
+|---|---|
+| **No Sales Branch / Business Type** | Buka **Employees** → tab **Sales Incentive**, isi **Sales Branch**, **Business Type**, dan **FTE Designation** |
+| **No target in [periode]** | Jalankan **Cascade Branch Target** untuk periode tersebut (bagian 10), atau isi target orang itu di menu **Targets** |
+
+Jika orang tersebut memang bukan sales (misalnya user admin yang kebetulan tercatat sebagai salesperson invoice), ganti **Incentive Salesperson** di invoice, atau ganti **Cashier** di order POS, ke sales yang benar.
+
+Setelah diperbaiki, klik **Calculate** lagi. Selama Calculate ditolak, tidak ada data yang berubah.
+
+Pengecekan yang sama juga berlaku saat Calculate dari **Branch Targets**. Yang dicek adalah tim cabang tersebut, ditambah orang yang belum punya cabang sama sekali.
 
 ---
 
@@ -741,6 +806,8 @@ Contoh:
 
 Jika credit note dibuat manual tanpa hubungan ke invoice asal, user perlu berhati-hati karena sistem mungkin tidak bisa menghubungkan otomatis.
 
+Untuk retur di POS, aturannya sama: retur yang dibuat dari order asal akan mengurangi dasar payout order tersebut. Detailnya ada di bagian 14.6.
+
 ---
 
 ## 27. Kasus yang Sering Ditanyakan
@@ -782,6 +849,10 @@ Tidak. Jika ada koreksi setelah lock, koreksi dilakukan di periode berikutnya.
 
 Karena Sales Order tersebut punya project, dan komisi dibagi ke orang-orang yang ada di project (PM, Salesperson 2, Salesperson 3). Jika Anda tidak tercantum di project, Anda tidak mendapat bagian. Minta Admin menambahkan Anda di project jika memang ikut menangani.
 
+### Kenapa bagian saya di project malah masuk ke PM?
+
+Karena saat Calculate, Anda belum punya **Sales Branch / Business Type**, atau belum punya **target** di periode invoice tersebut. Bagian Salesperson 2 / 3 yang tidak memenuhi syarat otomatis dialihkan ke PM. Minta Admin melengkapi data Anda (dan menjalankan cascade target), lalu **Calculate** ulang sebelum periode di-Lock.
+
 ### Kenapa satu invoice muncul beberapa kali di Transactions?
 
 Karena invoice tersebut dari project yang dibagi ke beberapa orang. Setiap orang mendapat satu baris sesuai persennya.
@@ -816,6 +887,7 @@ Kemungkinan:
 - Periode sudah Locked
 - Ada perubahan tim yang belum di-cascade ulang
 - Target belum lengkap
+- Ada orang dengan penjualan di periode itu yang belum punya **Sales Branch / Business Type** atau belum punya **target**. Pesan error menyebutkan nama-namanya (lihat bagian 18)
 
 ---
 
@@ -828,6 +900,7 @@ Sebelum klik **Calculate**, pastikan:
 - Branch Target sudah dibuat
 - Target sudah di-cascade dan di-apply
 - Data karyawan sudah benar
+- Semua salesperson invoice, PM / Salesperson 2 / 3 project, dan kasir POS sudah punya **Sales Branch**, **Business Type**, dan **target** di periode ini
 - Tidak ada warning perubahan tim
 - Invoice sudah Posted
 - Invoice memiliki salesperson yang benar

@@ -401,10 +401,11 @@ class IncentiveTransaction(models.Model):
                     ('employee_id', '=', employee.id),
                 ], limit=1)
 
-                # A POS return line already carries a negative qty, so its
-                # price_subtotal is negative as-is -- no sign flip, unlike
-                # credit notes whose lines are stored positive.
+                # A POS return line carries a negative qty, but its
+                # price_subtotal is not reliably negative (the client's Odoo 19
+                # stores +740,000 for qty -5). Take the sign from the qty.
                 is_return = line.qty < 0
+                base = -abs(line.price_subtotal) if is_return else line.price_subtotal
                 vals = {
                     'source_type': 'pos',
                     'pos_order_line_id': line.id,
@@ -413,7 +414,7 @@ class IncentiveTransaction(models.Model):
                     'company_id': order.company_id.id,
                     'source_period_id': period.id,
                     'transaction_type': 'refund' if is_return else 'invoice',
-                    'base_amount': line.price_subtotal,
+                    'base_amount': base,
                     'discount': line.discount,
                     'is_downpayment': False,
                     'is_discount_eligible': line.discount <= max_discount,
@@ -446,6 +447,19 @@ class IncentiveTransaction(models.Model):
             ('id', 'not in', created.ids),
         ])
         stale.unlink()
+
+        # Second pass, once every row exists: link each return to the sale it
+        # takes back, so that sale pays out on what the customer kept (see
+        # _net_base) -- the same net-off a credit note gets. Orders come
+        # newest first, so the return is usually generated before its sale.
+        for refund in created.filtered(
+                lambda t: t.transaction_type == 'refund'
+                and t.pos_order_line_id.refunded_orderline_id):
+            refund.reversal_of_id = self.search([
+                ('pos_order_line_id', '=',
+                 refund.pos_order_line_id.refunded_orderline_id.id),
+                ('transaction_type', '=', 'invoice'),
+            ]).sorted(lambda t: t.employee_id != refund.employee_id)[:1]
 
         _logger.info('Incentive POS: %s transactions generated, %s stale removed '
                      'for period %s', len(created), len(stale), period.name)
