@@ -1,12 +1,19 @@
-<search string="Incentive Payouts">
+<search>
     <field name="x_employee_id"/>
     <field name="x_period_id"/>
     <field name="x_branch_id"/>
-    <filter name="f_eligible" string="Eligible Month" domain="[('x_is_eligible', '=', True)]"/>
-    <filter name="f_frozen" string="Frozen" domain="[('x_is_frozen', '=', True)]"/>
+    <filter name="f_eligible" string="Eligible Month"
+            domain="[('x_is_eligible','=',True)]"/>
+    <filter name="f_not_eligible" string="Not Eligible"
+            domain="[('x_is_eligible','=',False)]"/>
+    <filter name="f_mixed" string="Mixed Scenario"
+            domain="[('x_is_mixed','=',True)]"/>
+    <filter name="f_mine" string="My Incentive"
+            domain="[('x_user_id','=',uid)]"/>
     <group>
-        <filter name="g_period" string="Period" context="{'group_by': 'x_period_id'}"/>
-        <filter name="g_branch" string="Branch" context="{'group_by': 'x_branch_id'}"/>
-        <filter name="g_btype" string="Business Type" context="{'group_by': 'x_business_type'}"/>
+        <filter name="g_period" string="Period" context="{'group_by':'x_period_id'}"/>
+        <filter name="g_branch" string="Branch" context="{'group_by':'x_branch_id'}"/>
+        <filter name="g_tier" string="Tier" context="{'group_by':'x_tier_id'}"/>
+        <filter name="g_manager" string="Manager" context="{'group_by':'x_manager_id'}"/>
     </group>
 </search>

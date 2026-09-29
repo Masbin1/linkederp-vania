@@ -1,28 +1,35 @@
-<form string="Sales Branch">
+<form>
     <sheet>
-        <div class="oe_title"><h1><field name="x_name"/></h1></div>
+        <div class="oe_title">
+            <h1><field name="x_name" placeholder="Jakarta"/></h1>
+        </div>
         <group>
             <group>
                 <field name="x_code"/>
-                <field name="x_sequence"/>
                 <field name="x_manager_id"/>
-                <field name="x_company_id"/>
-            </group>
-            <group>
                 <field name="x_ideal_team_size_b2b"/>
                 <field name="x_ideal_team_size_b2c"/>
-                <field name="x_active"/>
+                <field name="x_effective_fte_b2b"/>
+                <field name="x_effective_fte_b2c"/>
+            </group>
+            <group>
+                <field name="x_company_id" groups="base.group_multi_company"/>
+                <field name="x_active" widget="boolean_toggle"/>
             </group>
         </group>
-        <field name="x_employee_ids" readonly="1">
-            <list>
-                <field name="name"/>
-                <field name="x_incentive_business_type"/>
-                <field name="x_incentive_designation_id"/>
-                <field name="x_incentive_date_start"/>
-                <field name="x_incentive_date_end"/>
-                <field name="x_is_vacant_slot"/>
-            </list>
-        </field>
+        <notebook>
+            <page string="Sales Team">
+                <field name="x_employee_ids" readonly="1">
+                    <list>
+                        <field name="name"/>
+                        <field name="x_incentive_business_type"/>
+                        <field name="x_incentive_designation_id"/>
+                        <field name="x_is_vacant_slot"/>
+                        <field name="x_incentive_date_start"/>
+                        <field name="x_incentive_date_end"/>
+                    </list>
+                </field>
+            </page>
+        </notebook>
     </sheet>
 </form>

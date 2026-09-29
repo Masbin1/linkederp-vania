@@ -1,8 +1,8 @@
-<list string="Incentive Rules">
+<list>
     <field name="x_name"/>
     <field name="x_date_from"/>
     <field name="x_date_to"/>
-    <field name="x_base_rate"/>
-    <field name="x_bonus_rate"/>
+    <field name="x_base_rate" widget="percentage"/>
+    <field name="x_bonus_rate" widget="percentage"/>
     <field name="x_max_discount"/>
 </list>

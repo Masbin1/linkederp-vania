@@ -1,7 +1,14 @@
-<list string="Incentive Periods">
+<list decoration-muted="x_state == 'locked'" decoration-success="x_state == 'approved'">
     <field name="x_name"/>
     <field name="x_date_start"/>
     <field name="x_date_end"/>
     <field name="x_rule_id"/>
-    <field name="x_state" widget="badge"/>
+    <field name="x_target_count" string="Targets"/>
+    <field name="x_payout_count" string="Payouts"/>
+    <field name="x_total_payout" widget="monetary"/>
+    <field name="x_currency_id" column_invisible="1"/>
+    <field name="x_state" widget="badge"
+           decoration-info="x_state == 'calculated'"
+           decoration-success="x_state == 'approved'"
+           decoration-muted="x_state == 'locked'"/>
 </list>

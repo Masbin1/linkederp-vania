@@ -1,13 +1,16 @@
-<list string="Targets" editable="bottom">
+<list editable="bottom" sample="1">
     <field name="x_period_id"/>
     <field name="x_employee_id"/>
     <field name="x_branch_id"/>
     <field name="x_business_type"/>
+    <field name="x_designation_id"/>
     <field name="x_target_type"/>
-    <field name="x_amount" sum="Total"/>
+    <field name="x_amount" sum="Total Target"/>
+    <field name="x_shortfall_amount" sum="Shortfall" optional="show"/>
+    <field name="x_carry_forward_amount" sum="Carry-Forward" optional="show"/>
+    <field name="x_months_remaining" optional="show"/>
+    <field name="x_fte_used" optional="show"/>
+    <field name="x_proration_ratio" optional="show"/>
     <field name="x_source"/>
-    <field name="x_proration_ratio"/>
-    <field name="x_shortfall_amount" optional="hide"/>
-    <field name="x_carry_forward_amount" optional="hide"/>
     <field name="x_currency_id" column_invisible="1"/>
 </list>

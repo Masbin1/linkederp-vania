@@ -1,0 +1,18 @@
+<search>
+    <field name="x_employee_id"/>
+    <field name="x_period_id"/>
+    <field name="x_branch_id"/>
+    <filter name="f_incentive" string="Incentive-Based"
+            domain="[('x_target_type','=','incentive')]"/>
+    <filter name="f_bonus" string="Bonus-Based"
+            domain="[('x_target_type','=','bonus')]"/>
+    <separator/>
+    <filter name="f_redistributed" string="Redistributed"
+            domain="[('x_source','=','redistribution')]"/>
+    <group>
+        <filter name="g_period" string="Period" context="{'group_by':'x_period_id'}"/>
+        <filter name="g_branch" string="Branch" context="{'group_by':'x_branch_id'}"/>
+        <filter name="g_type" string="Bucket" context="{'group_by':'x_target_type'}"/>
+        <filter name="g_employee" string="Salesperson" context="{'group_by':'x_employee_id'}"/>
+    </group>
+</search>

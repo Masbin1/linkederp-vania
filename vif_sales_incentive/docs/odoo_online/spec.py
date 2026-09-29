@@ -62,9 +62,11 @@ MODELS = [
         ('x_achievement_max', 'float', 'Achievement To', {}),
         ('x_is_top_tier', 'boolean', 'Open-ended (Top Tier)', {}),
         ('x_allocation', 'float', 'Allocation', {'help': '0.4 = 40% of base rate'}),
+        ('x_base_rate', 'float', 'Base Rate', {'related': 'x_rule_id.x_base_rate'}),
         ('x_payout_rate', 'float', 'Payout Rate', {
             'compute': 'c_tier_payout_rate.py',
             'depends': 'x_allocation,x_rule_id.x_base_rate', 'store': True}),
+        ('x_note', 'char', 'Note', {}),
     ]),
     ('x_incentive_period', 'Incentive Period', [
         ('x_name', 'char', 'Name', {'required': True, 'tracking': 10}),
@@ -117,9 +119,11 @@ MODELS = [
             'compute': 'c_target_name.py', 'store': True,
             'depends': 'x_employee_id.name,x_target_type,x_period_id.x_name'}),
         ('x_period_id', 'many2one', 'Period', {'relation': 'x_incentive_period',
-                                                'required': True, 'ondelete': 'restrict'}),
+                                                'required': True, 'ondelete': 'restrict',
+                                                'tracking': 10}),
         ('x_employee_id', 'many2one', 'Employee', {'relation': 'hr.employee',
-                                                    'required': True, 'ondelete': 'restrict'}),
+                                                    'required': True, 'ondelete': 'restrict',
+                                                    'tracking': 20}),
         ('x_branch_id', 'many2one', 'Branch', {
             'relation': 'x_incentive_branch',
             'related': 'x_employee_id.x_incentive_branch_id', 'store': True}),
@@ -135,9 +139,9 @@ MODELS = [
         ('x_currency_id', 'many2one', 'Currency', {
             'relation': 'res.currency', 'related': 'x_company_id.currency_id'}),
         ('x_target_type', 'selection', 'Bucket',
-         {'selection': SEL_TARGET_TYPE, 'required': True}),
-        ('x_amount', 'monetary', 'Amount', {'required': True}),
-        ('x_source', 'selection', 'Source', {'selection': [
+         {'selection': SEL_TARGET_TYPE, 'required': True, 'tracking': 30}),
+        ('x_amount', 'monetary', 'Amount', {'required': True, 'tracking': 40}),
+        ('x_source', 'selection', 'Source', {'tracking': 50, 'selection': [
             ('manual', 'Manual Input'), ('rf_cascade', 'Rolling Forecast Cascade'),
             ('redistribution', 'Vacancy Redistribution'),
             ('proration', 'New Hire Proration')]}),
@@ -156,15 +160,17 @@ MODELS = [
                                                 'required': True, 'ondelete': 'restrict'}),
         ('x_target_id', 'many2one', 'Resulting Target', {
             'relation': 'x_incentive_target', 'ondelete': 'set null'}),
-        ('x_reason', 'selection', 'Reason', {'required': True, 'selection': [
+        ('x_reason', 'selection', 'Reason', {'required': True, 'tracking': 10, 'selection': [
             ('resignation', 'Resignation / Vacant'), ('new_hire', 'New Hire Proration'),
             ('rf_revision', 'Rolling Forecast Revision'),
             ('replacement', 'Replacement Joined'), ('manual', 'Manual Adjustment')]}),
-        ('x_from_employee_id', 'many2one', 'From', {'relation': 'hr.employee'}),
-        ('x_to_employee_id', 'many2one', 'To', {'relation': 'hr.employee'}),
+        ('x_from_employee_id', 'many2one', 'From', {'relation': 'hr.employee',
+                                                   'tracking': 20}),
+        ('x_to_employee_id', 'many2one', 'To', {'relation': 'hr.employee',
+                                               'tracking': 30}),
         ('x_currency_id', 'many2one', 'Currency', {
             'relation': 'res.currency', 'related': 'x_period_id.x_company_id.currency_id'}),
-        ('x_amount', 'monetary', 'Amount', {'required': True}),
+        ('x_amount', 'monetary', 'Amount', {'required': True, 'tracking': 40}),
         ('x_target_type', 'selection', 'Bucket',
          {'selection': SEL_TARGET_TYPE, 'required': True}),
         ('x_fte_share', 'float', 'FTE Share', {}),
@@ -227,6 +233,9 @@ MODELS = [
         ('x_tier_id', 'many2one', 'Tier (snapshot)', {'relation': 'x_incentive_rule_tier'}),
         ('x_tier_payout_rate', 'float', 'Payout Rate (snapshot)', {}),
         ('x_payout_amount', 'monetary', 'Payout Amount', {}),
+        ('x_display_ref', 'char', 'Display Ref', {
+            'compute': 'c_transaction_display_ref.py', 'store': False,
+            'depends': 'x_move_id.name,x_pos_order_id.pos_reference,x_product_id.name'}),
         ('x_reversal_of_id', 'many2one', 'Reversal Of', {
             'relation': 'x_incentive_transaction', 'ondelete': 'set null'}),
         ('x_state', 'selection', 'Status', {'selection': [
@@ -242,7 +251,8 @@ MODELS = [
         ('x_user_id', 'many2one', 'User', {
             'relation': 'res.users', 'related': 'x_employee_id.user_id', 'store': True}),
         ('x_manager_id', 'many2one', 'Manager', {
-            'relation': 'hr.employee', 'related': 'x_employee_id.parent_id', 'store': True}),
+            'relation': 'hr.employee', 'related': 'x_employee_id.parent_id', 'store': True,
+            'tracking': 10}),
         ('x_branch_id', 'many2one', 'Branch', {
             'relation': 'x_incentive_branch',
             'related': 'x_employee_id.x_incentive_branch_id', 'store': True}),
@@ -339,6 +349,8 @@ MODELS = [
             'ondelete': 'cascade'}),
         ('x_move_id', 'many2one', 'Invoice', {
             'relation': 'account.move', 'related': 'x_transaction_id.x_move_id'}),
+        ('x_move_line_id', 'many2one', 'Invoice Line', {
+            'relation': 'account.move.line', 'related': 'x_transaction_id.x_move_line_id'}),
         ('x_employee_id', 'many2one', 'Employee', {
             'relation': 'hr.employee', 'related': 'x_transaction_id.x_employee_id'}),
         ('x_currency_id', 'many2one', 'Currency', {
@@ -399,6 +411,16 @@ STANDARD_FIELDS = [
             'relation': 'hr.employee',
             'help': 'Filled by automation "VIF: Invoice Incentive Salesperson". '
                     'Only used for invoices without a project.'}),
+        # NOT stored: a stored compute on account.move is computed for every
+        # existing journal entry at creation and can time out on Online.
+        ('x_incentive_full_payment_date', 'date', 'Fully Paid On', {
+            'compute': 'c_move_full_payment_date.py', 'store': False,
+            'depends': 'payment_state'}),
+    ]),
+    ('account.move.line', [
+        ('x_incentive_eligible', 'boolean', 'Incentive Eligible', {
+            'compute': 'c_move_line_incentive_eligible.py', 'store': False,
+            'depends': 'discount,is_downpayment,move_id.invoice_date'}),
     ]),
 ]
 
@@ -406,6 +428,25 @@ STANDARD_FIELDS = [
 EXTRA_FIELDS = [
     ('x_incentive_branch', 'x_employee_ids', 'one2many', 'Sales Team',
      {'relation': 'hr.employee', 'relation_field': 'x_incentive_branch_id'}),
+    # Branch head-count / FTE read the Sales Team above.
+    ('x_incentive_branch', 'x_employee_count', 'integer', 'Employee Count', {
+        'compute': 'c_branch_employee_count.py', 'store': False,
+        'depends': 'x_employee_ids'}),
+    ('x_incentive_branch', 'x_effective_fte_b2b', 'float', 'FTE B2B', {
+        'compute': 'c_branch_effective_fte_b2b.py', 'store': False,
+        'depends': 'x_employee_ids.x_incentive_business_type,'
+                   'x_employee_ids.x_incentive_designation_id',
+        'help': "Today's weighted headcount of the B2B team in this branch."}),
+    ('x_incentive_branch', 'x_effective_fte_b2c', 'float', 'FTE B2C', {
+        'compute': 'c_branch_effective_fte_b2c.py', 'store': False,
+        'depends': 'x_employee_ids.x_incentive_business_type,'
+                   'x_employee_ids.x_incentive_designation_id',
+        'help': "Today's weighted headcount of the B2C team in this branch."}),
+    ('x_incentive_branch', 'x_effective_fte', 'float', 'Effective FTE', {
+        'compute': 'c_branch_effective_fte.py', 'store': False,
+        'depends': 'x_employee_ids.x_incentive_business_type,'
+                   'x_employee_ids.x_incentive_designation_id',
+        'help': "Today's weighted headcount of the whole branch, B2B and B2C together."}),
     ('x_incentive_rule', 'x_tier_ids', 'one2many', 'Tiers',
      {'relation': 'x_incentive_rule_tier', 'relation_field': 'x_rule_id'}),
     ('x_incentive_period', 'x_branch_target_ids', 'one2many', 'Branch Targets',
@@ -427,6 +468,17 @@ EXTRA_FIELDS = [
     ('x_incentive_period', 'x_total_payout', 'monetary', 'Total Payout', {
         'compute': 'c_period_total_payout.py', 'store': False,
         'depends': 'x_payout_ids.x_total_payout'}),
+    ('x_incentive_period', 'x_target_count', 'integer', 'Target Count', {
+        'compute': 'c_period_target_count.py', 'store': False,
+        'depends': 'x_target_ids'}),
+    ('x_incentive_period', 'x_payout_count', 'integer', 'Payout Count', {
+        'compute': 'c_period_payout_count.py', 'store': False,
+        'depends': 'x_payout_ids'}),
+    ('x_incentive_period', 'x_transaction_count', 'integer', 'Transaction Count', {
+        'compute': 'c_period_transaction_count.py', 'store': False,
+        'depends': 'x_transaction_ids'}),
+    ('x_incentive_target', 'x_movement_ids', 'one2many', 'Movements',
+     {'relation': 'x_incentive_target_movement', 'relation_field': 'x_target_id'}),
     ('account.move', 'x_incentive_transaction_ids', 'one2many', 'Incentive Transactions',
      {'relation': 'x_incentive_transaction', 'relation_field': 'x_move_id'}),
     ('pos.order', 'x_incentive_transaction_ids', 'one2many', 'Incentive Transactions',
@@ -436,15 +488,38 @@ EXTRA_FIELDS = [
 ]
 
 # Models with a chatter (Settings > Technical > Models > Has Mail Thread /
-# Has Mail Activity). Tick them when creating the model: once on, Odoo does
-# not let them be switched off again.
-MAIL_MODELS = ['x_incentive_period']
+# Has Mail Activity), as in the module. Once on, Odoo does not let them be
+# switched off again. {model: also Has Mail Activity}
+MAIL_MODELS = {
+    'x_incentive_period': True,
+    'x_incentive_payout': False,
+    'x_incentive_target': False,
+    'x_incentive_target_movement': False,
+}
+
+# Default sort order of each model (Settings > Technical > Models > Order),
+# as the module's _order. Set it AFTER the fields exist -- Odoo checks them.
+MODEL_ORDER = {
+    'x_incentive_designation': 'x_sequence, id',
+    'x_incentive_branch': 'x_sequence, x_code',
+    'x_incentive_rule': 'x_date_from desc',
+    'x_incentive_rule_tier': 'x_level',
+    'x_incentive_period': 'x_date_start desc',
+    'x_incentive_branch_target': 'x_period_id desc, x_branch_id, x_business_type',
+    'x_incentive_target': 'x_period_id desc, x_employee_id, x_target_type',
+    'x_incentive_target_movement': 'x_date_effective desc, id desc',
+    'x_incentive_transaction': 'x_source_period_id desc, x_employee_id, id',
+    'x_incentive_payout': 'x_period_id desc, x_employee_id',
+    'x_incentive_cascade': 'create_date desc',
+    'x_incentive_refund': 'create_date desc',
+    'x_incentive_refund_policy': 'x_sequence, id',
+}
 
 # Creation order: masters, then the employee fields every later model relates
 # through, then the rest.
 BUILD_ORDER = [
     'x_incentive_designation', 'x_incentive_branch',
-    'hr.employee', 'account.move',
+    'hr.employee', 'account.move', 'account.move.line',
     'x_incentive_rule', 'x_incentive_rule_tier', 'x_incentive_period',
     'x_incentive_branch_target', 'x_incentive_target',
     'x_incentive_target_movement', 'x_incentive_transaction',
@@ -490,6 +565,11 @@ SERVER_ACTIONS = [
     ('VIF: Period Lock', 'x_incentive_period', 'sa_period_lock.py'),
     ('VIF: Period Reset to Open', 'x_incentive_period', 'sa_period_reset.py'),
     ('VIF: Period Generate Next', 'x_incentive_period', 'sa_period_generate_next.py'),
+    ('VIF: Period View Targets', 'x_incentive_period', 'sa_period_view_targets.py'),
+    ('VIF: Period View Transactions', 'x_incentive_period', 'sa_period_view_transactions.py'),
+    ('VIF: Period View Payouts', 'x_incentive_period', 'sa_period_view_payouts.py'),
+    ('VIF: Payout Recompute', 'x_incentive_payout', 'sa_payout_recompute.py'),
+    ('VIF: Payout View Transactions', 'x_incentive_payout', 'sa_payout_view_transactions.py'),
     ('VIF: Branch Target Calculate', 'x_incentive_branch_target', 'sa_bt_calculate.py'),
     ('VIF: Branch Target Approve', 'x_incentive_branch_target', 'sa_bt_approve.py'),
     ('VIF: Branch Target Lock', 'x_incentive_branch_target', 'sa_bt_lock.py'),
@@ -533,17 +613,22 @@ VIEWS = [
     ('x_incentive_period.list', 'x_incentive_period', 'list', 'period_list.xml', None),
     ('x_incentive_branch_target.form', 'x_incentive_branch_target', 'form', 'branch_target_form.xml', None),
     ('x_incentive_branch_target.list', 'x_incentive_branch_target', 'list', 'branch_target_list.xml', None),
+    ('x_incentive_branch_target.search', 'x_incentive_branch_target', 'search', 'branch_target_search.xml', None),
     ('x_incentive_cascade.form', 'x_incentive_cascade', 'form', 'cascade_form.xml', None),
     ('x_incentive_cascade.list', 'x_incentive_cascade', 'list', 'cascade_list.xml', None),
     ('x_incentive_target.list', 'x_incentive_target', 'list', 'target_list.xml', None),
+    ('x_incentive_target.search', 'x_incentive_target', 'search', 'target_search.xml', None),
     ('x_incentive_target_movement.form', 'x_incentive_target_movement', 'form', 'movement_form.xml', None),
     ('x_incentive_target_movement.list', 'x_incentive_target_movement', 'list', 'movement_list.xml', None),
     ('x_incentive_transaction.form', 'x_incentive_transaction', 'form', 'transaction_form.xml', None),
     ('x_incentive_transaction.list', 'x_incentive_transaction', 'list', 'transaction_list.xml', None),
     ('x_incentive_transaction.search', 'x_incentive_transaction', 'search', 'transaction_search.xml', None),
+    ('x_incentive_transaction.pivot', 'x_incentive_transaction', 'pivot', 'transaction_pivot.xml', None),
     ('x_incentive_payout.form', 'x_incentive_payout', 'form', 'payout_form.xml', None),
     ('x_incentive_payout.list', 'x_incentive_payout', 'list', 'payout_list.xml', None),
     ('x_incentive_payout.search', 'x_incentive_payout', 'search', 'payout_search.xml', None),
+    ('x_incentive_payout.pivot', 'x_incentive_payout', 'pivot', 'payout_pivot.xml', None),
+    ('x_incentive_payout.graph', 'x_incentive_payout', 'graph', 'payout_graph.xml', None),
     ('x_incentive_refund.form', 'x_incentive_refund', 'form', 'refund_form.xml', None),
     ('x_incentive_rule.form', 'x_incentive_rule', 'form', 'rule_form.xml', None),
     ('x_incentive_rule.list', 'x_incentive_rule', 'list', 'rule_list.xml', None),
@@ -562,36 +647,37 @@ WINDOW_ACTIONS = [
     ('Incentive Periods', 'x_incentive_period', 'list,form', '[]', '{}'),
     ('Branch Targets', 'x_incentive_branch_target', 'list,form', '[]', '{}'),
     ('Cascade Branch Target', 'x_incentive_cascade', 'list,form', '[]', '{}'),
-    ('Targets', 'x_incentive_target', 'list', '[]', '{}'),
+    ('Incentive Targets', 'x_incentive_target', 'list,form', '[]', '{}'),
     ('Target Movements', 'x_incentive_target_movement', 'list,form', '[]', '{}'),
-    ('Payouts', 'x_incentive_payout', 'list,form', '[]', "{'search_default_g_period': 1}"),
-    ('My Incentive', 'x_incentive_payout', 'list,form', "[('x_employee_id.user_id', '=', uid)]", '{}'),
-    ('Transactions', 'x_incentive_transaction', 'list,form', '[]', '{}'),
-    ('Rules & Tiers', 'x_incentive_rule', 'list,form', '[]', '{}'),
+    ('Incentive Payouts', 'x_incentive_payout', 'list,pivot,graph,form', '[]', '{}'),
+    ('My Incentive', 'x_incentive_payout', 'list,form', "[('x_user_id', '=', uid)]", '{}'),
+    ('Incentive Transactions', 'x_incentive_transaction', 'list,pivot,form', '[]', '{}'),
+    ('Incentive Rules', 'x_incentive_rule', 'list,form', '[]', '{}'),
     ('Sales Branches', 'x_incentive_branch', 'list,form', '[]', '{}'),
-    ('FTE Designations', 'x_incentive_designation', 'list', '[]', '{}'),
-    ('Refund Policies', 'x_incentive_refund_policy', 'list', '[]', '{}'),
+    ('FTE Designations', 'x_incentive_designation', 'list,form', '[]', '{}'),
+    ('Refund Policies', 'x_incentive_refund_policy', 'list,form', '[]', '{}'),
 ]
 
 # Menus (Settings > Technical > User Interface > Menu Items).
-# (menu name, parent menu name or None, window action name or None, sequence)
+# (menu name, parent menu name or None, window action name or None, sequence,
+#  group allowed to see it or None) -- same tree and groups as the module.
 MENUS = [
-    ('Sales Incentive', None, None, 60),
-    ('Operations', 'Sales Incentive', None, 10),
-    ('Incentive Periods', 'Operations', 'Incentive Periods', 10),
-    ('Branch Targets', 'Operations', 'Branch Targets', 20),
-    ('Cascade Branch Target', 'Operations', 'Cascade Branch Target', 30),
-    ('Targets', 'Operations', 'Targets', 40),
-    ('Target Movements', 'Operations', 'Target Movements', 50),
-    ('Reporting', 'Sales Incentive', None, 20),
-    ('My Incentive', 'Reporting', 'My Incentive', 5),
-    ('Payouts', 'Reporting', 'Payouts', 10),
-    ('Transactions', 'Reporting', 'Transactions', 20),
-    ('Configuration', 'Sales Incentive', None, 90),
-    ('Rules & Tiers', 'Configuration', 'Rules & Tiers', 10),
-    ('Sales Branches', 'Configuration', 'Sales Branches', 20),
-    ('FTE Designations', 'Configuration', 'FTE Designations', 30),
-    ('Refund Policies', 'Configuration', 'Refund Policies', 40),
+    ('Sales Incentive', None, None, 85, 'VIF Incentive / Salesperson'),
+    ('Operations', 'Sales Incentive', None, 10, None),
+    ('My Incentive', 'Operations', 'My Incentive', 5, None),
+    ('Incentive Periods', 'Operations', 'Incentive Periods', 10, 'VIF Incentive / Administrator'),
+    ('Targets', 'Operations', 'Incentive Targets', 20, None),
+    ('Cascade Branch Target', 'Operations', 'Cascade Branch Target', 25, 'VIF Incentive / Administrator'),
+    ('Branch Targets', 'Operations', 'Branch Targets', 27, 'VIF Incentive / Administrator'),
+    ('Target Movements', 'Operations', 'Target Movements', 30, 'VIF Incentive / Administrator'),
+    ('Reporting', 'Sales Incentive', None, 20, None),
+    ('Payouts', 'Reporting', 'Incentive Payouts', 10, None),
+    ('Transactions', 'Reporting', 'Incentive Transactions', 20, None),
+    ('Configuration', 'Sales Incentive', None, 90, 'VIF Incentive / Administrator'),
+    ('Rules & Tiers', 'Configuration', 'Incentive Rules', 10, None),
+    ('Sales Branches', 'Configuration', 'Sales Branches', 20, None),
+    ('FTE Designations', 'Configuration', 'FTE Designations', 30, None),
+    ('Refund Policies', 'Configuration', 'Refund Policies', 40, None),
 ]
 
 # Security (Settings > Users & Companies > Groups; Technical > Access Rights /

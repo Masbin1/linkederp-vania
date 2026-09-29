@@ -102,12 +102,13 @@ for name in spec['BUILD_ORDER']:
     if name in models_by_name:
         _n, label, flds = models_by_name[name]
         mail = name in spec['MAIL_MODELS']
+        activity = bool(spec['MAIL_MODELS'].get(name))
         rec = IrModel.search([('model', '=', name)], limit=1)
         if not rec:
             IrModel.create({'name': label, 'model': name, 'state': 'manual',
-                            'is_mail_thread': mail, 'is_mail_activity': mail})
-        elif mail and not rec.is_mail_thread:
-            rec.write({'is_mail_thread': True, 'is_mail_activity': True})
+                            'is_mail_thread': mail, 'is_mail_activity': activity})
+        elif (mail and not rec.is_mail_thread) or (activity and not rec.is_mail_activity):
+            rec.write({'is_mail_thread': True, 'is_mail_activity': activity})
     else:
         flds = std_by_name[name]
     for fname, ftype, flabel, opts in flds:
@@ -116,6 +117,12 @@ for name in spec['BUILD_ORDER']:
 
 for model, fname, ftype, flabel, opts in spec['EXTRA_FIELDS']:
     ensure_field(model, fname, ftype, flabel, opts)
+
+# default sort order, once every field it names exists
+for model, order in spec['MODEL_ORDER'].items():
+    rec = model_rec(model)
+    if rec.order != order:
+        rec.write({'order': order})
 
 company = env.company
 for model, fname, value in spec['DEFAULTS']:
@@ -196,7 +203,7 @@ for aname, model, mode, domain, ctx in spec['WINDOW_ACTIONS']:
 
 Menu = env['ir.ui.menu']
 menus = {}
-for mname, parent, aname, seq in spec['MENUS']:
+for mname, parent, aname, seq, _grp in spec['MENUS']:
     vals = {'name': mname, 'sequence': seq,
             'parent_id': menus[parent].id if parent else False,
             'action': 'ir.actions.act_window,%d' % acts[aname].id if aname else False}
@@ -243,6 +250,9 @@ for name in spec['BUILD_ORDER']:
         Access.create({'name': '%s %s' % (name, 'admin' if full else 'user'),
                        'model_id': mid, 'group_id': grp.id, 'perm_read': True,
                        'perm_write': full, 'perm_create': full, 'perm_unlink': full})
+
+for mname, parent, aname, seq, gname in spec['MENUS']:
+    menus[mname].write({'group_ids': [Command.set(groups[gname].ids if gname else [])]})
 
 Rule = env['ir.rule']
 for rname, model, gname, domain in spec['RECORD_RULES']:

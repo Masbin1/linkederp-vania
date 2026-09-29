@@ -1,12 +1,20 @@
-<list string="Branch Targets">
-    <field name="x_period_id"/>
-    <field name="x_branch_id"/>
-    <field name="x_business_type"/>
-    <field name="x_amount"/>
-    <field name="x_carry_forward_amount"/>
-    <field name="x_amount_total"/>
-    <field name="x_payout_total"/>
-    <field name="x_needs_recascade"/>
-    <field name="x_state" widget="badge"/>
+<list editable="bottom" sample="1"
+      decoration-muted="x_state == 'locked'"
+      decoration-success="x_state == 'approved'"
+      decoration-warning="x_needs_recascade">
+    <field name="x_period_id" readonly="x_state != 'draft'"/>
+    <field name="x_branch_id" readonly="x_state != 'draft'"/>
+    <field name="x_business_type" readonly="x_state != 'draft'"/>
+    <field name="x_amount" sum="Base Target" readonly="x_state != 'draft'"/>
+    <field name="x_carry_forward_amount" sum="Carry-Forward" optional="show"/>
+    <field name="x_amount_total" sum="Total Target"/>
+    <field name="x_payout_total" sum="Payout" optional="show"/>
+    <field name="x_state" widget="badge"
+           decoration-info="x_state == 'calculated'"
+           decoration-success="x_state == 'approved'"
+           decoration-muted="x_state == 'locked'"/>
+    <field name="x_needs_recascade" string="Re-cascade" optional="show"
+           widget="boolean_toggle" readonly="1"/>
+    <field name="x_company_id" groups="base.group_multi_company" optional="hide"/>
     <field name="x_currency_id" column_invisible="1"/>
 </list>

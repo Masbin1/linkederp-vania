@@ -1,0 +1,13 @@
+<search>
+    <field name="x_branch_id"/>
+    <field name="x_period_id"/>
+    <filter name="f_open" string="Not Locked"
+            domain="[('x_state','!=','locked')]"/>
+    <filter name="f_approved" string="Approved"
+            domain="[('x_state','=','approved')]"/>
+    <group>
+        <filter name="g_period" string="Period" context="{'group_by':'x_period_id'}"/>
+        <filter name="g_branch" string="Branch" context="{'group_by':'x_branch_id'}"/>
+        <filter name="g_state" string="Status" context="{'group_by':'x_state'}"/>
+    </group>
+</search>

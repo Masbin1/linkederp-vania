@@ -67,9 +67,15 @@ for n, name in enumerate(spec['BUILD_ORDER'], 1):
         _m, label, flds = models[name]
         out.append('## %d. `%s` -- %s (model baru)' % (n, name, label))
         if name in spec['MAIL_MODELS']:
-            out += ['', '**Chatter:** saat membuat model, centang **Has Mail Thread** '
-                    'dan **Has Mail Activity** (tidak bisa dimatikan lagi). Field '
-                    'dengan *Tracking* diisi di **Enable Ordered Tracking**.']
+            boxes = '**Has Mail Thread**'
+            if spec['MAIL_MODELS'][name]:
+                boxes += ' dan **Has Mail Activity**'
+            out += ['', '**Chatter:** di form Model, centang %s (tidak bisa dimatikan '
+                    'lagi). Field dengan *Tracking* diisi di **Enable Ordered '
+                    'Tracking**.' % boxes]
+        if name in spec['MODEL_ORDER']:
+            out += ['', '**Order** (di form Model, isi SETELAH semua field model ini '
+                    'dibuat): `%s`' % spec['MODEL_ORDER'][name]]
     else:
         flds = std[name]
         out.append('## %d. `%s` (model standar -- tambah field)' % (n, name))

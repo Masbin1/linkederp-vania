@@ -1,0 +1,6 @@
+<pivot>
+    <field name="x_employee_id" type="row"/>
+    <field name="x_payment_period_id" type="col"/>
+    <field name="x_base_amount" type="measure"/>
+    <field name="x_payout_amount" type="measure"/>
+</pivot>

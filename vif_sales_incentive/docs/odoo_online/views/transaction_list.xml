@@ -1,21 +1,32 @@
-<list string="Incentive Transactions" create="0">
-    <field name="x_name"/>
+<list sample="1"
+      decoration-muted="not x_is_discount_eligible"
+      decoration-info="x_is_prior_period"
+      decoration-danger="x_transaction_type == 'refund'">
+    <field name="x_source_type" optional="show"/>
+    <field name="x_move_id" optional="show"/>
+    <field name="x_pos_order_id" optional="show"/>
     <field name="x_employee_id"/>
     <field name="x_project_id" optional="show"/>
     <field name="x_split_role" optional="show"/>
     <field name="x_split_share" optional="show" widget="percentage"/>
-    <field name="x_source_type" optional="hide"/>
+    <field name="x_branch_id" optional="show"/>
+    <field name="x_product_id" optional="hide"/>
+    <field name="x_invoice_date"/>
     <field name="x_source_period_id"/>
     <field name="x_payment_period_id"/>
-    <field name="x_transaction_type"/>
-    <field name="x_base_amount" sum="Total"/>
-    <field name="x_discount" optional="hide"/>
-    <field name="x_is_discount_eligible"/>
-    <field name="x_is_payment_eligible"/>
-    <field name="x_is_downpayment" optional="hide"/>
-    <field name="x_bucket" optional="hide"/>
-    <field name="x_tier_payout_rate" optional="hide"/>
-    <field name="x_payout_amount" sum="Total"/>
-    <field name="x_state" widget="badge"/>
+    <field name="x_payment_date" optional="hide"/>
+    <field name="x_is_prior_period" optional="show"/>
+    <field name="x_discount"/>
+    <field name="x_is_downpayment" optional="show" widget="boolean_toggle"/>
+    <field name="x_is_discount_eligible" widget="boolean_toggle"/>
+    <field name="x_is_payment_eligible" widget="boolean_toggle"/>
+    <field name="x_bucket"/>
+    <field name="x_incentive_alloc" optional="show" sum="Incentive Alloc"/>
+    <field name="x_bonus_alloc" optional="show" sum="Bonus Alloc"/>
+    <field name="x_base_amount" sum="Base"/>
+    <field name="x_tier_id"/>
+    <field name="x_tier_payout_rate" digits="[16,6]"/>
+    <field name="x_payout_amount" sum="Payout"/>
     <field name="x_currency_id" column_invisible="1"/>
+    <field name="x_state"/>
 </list>

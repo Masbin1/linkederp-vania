@@ -1,23 +1,38 @@
-<search string="Incentive Transactions">
+<search>
     <field name="x_employee_id"/>
     <field name="x_move_id"/>
     <field name="x_project_id"/>
     <field name="x_source_period_id"/>
     <field name="x_payment_period_id"/>
-    <filter name="f_invoice" string="From Invoice" domain="[('x_source_type', '=', 'invoice')]"/>
-    <filter name="f_pos" string="From POS" domain="[('x_source_type', '=', 'pos')]"/>
-    <separator/>
-    <filter name="f_paid" string="Fully Paid" domain="[('x_is_payment_eligible', '=', True)]"/>
-    <filter name="f_unpaid" string="Not Fully Paid" domain="[('x_is_payment_eligible', '=', False)]"/>
-    <separator/>
+    <filter name="f_eligible" string="Discount Eligible"
+            domain="[('x_is_discount_eligible','=',True)]"/>
     <filter name="f_excluded" string="Excluded (discount &gt; cap)"
-            domain="[('x_is_discount_eligible', '=', False)]"/>
-    <filter name="f_prior" string="Prior-Period Invoice" domain="[('x_is_prior_period', '=', True)]"/>
-    <filter name="f_refund" string="Refunds" domain="[('x_transaction_type', '=', 'refund')]"/>
+            domain="[('x_is_discount_eligible','=',False)]"/>
+    <separator/>
+    <filter name="f_paid" string="Fully Paid"
+            domain="[('x_is_payment_eligible','=',True)]"/>
+    <filter name="f_unpaid" string="Not Fully Paid"
+            domain="[('x_is_payment_eligible','=',False)]"/>
+    <separator/>
+    <filter name="f_prior" string="Prior-Period Invoice"
+            domain="[('x_is_prior_period','=',True)]"/>
+    <filter name="f_refund" string="Refunds"
+            domain="[('x_transaction_type','=','refund')]"/>
+    <separator/>
+    <filter name="f_invoice_source" string="From Invoice"
+            domain="[('x_source_type','=','invoice')]"/>
+    <filter name="f_pos_source" string="From POS"
+            domain="[('x_source_type','=','pos')]"/>
     <group>
-        <filter name="g_employee" string="Employee" context="{'group_by': 'x_employee_id'}"/>
-        <filter name="g_project" string="Project" context="{'group_by': 'x_project_id'}"/>
-        <filter name="g_source" string="Source Type" context="{'group_by': 'x_source_type'}"/>
-        <filter name="g_source_period" string="Source Period" context="{'group_by': 'x_source_period_id'}"/>
+        <filter name="g_source" string="Source Period"
+                context="{'group_by':'x_source_period_id'}"/>
+        <filter name="g_payment" string="Payment Period"
+                context="{'group_by':'x_payment_period_id'}"/>
+        <filter name="g_employee" string="Salesperson"
+                context="{'group_by':'x_employee_id'}"/>
+        <filter name="g_branch" string="Branch" context="{'group_by':'x_branch_id'}"/>
+        <filter name="g_bucket" string="Bucket" context="{'group_by':'x_bucket'}"/>
+        <filter name="g_source_type" string="Source Type" context="{'group_by':'x_source_type'}"/>
+        <filter name="g_project" string="Project" context="{'group_by':'x_project_id'}"/>
     </group>
 </search>

@@ -1,7 +1,7 @@
-<list string="Cascade Runs">
-    <field name="x_name"/>
+<list string="Target Cascade">
     <field name="x_period_id"/>
-    <field name="x_branch_ids" widget="many2many_tags"/>
+    <field name="x_branch_ids" widget="many2many_tags"
+           options="{'no_create': True}"/>
     <field name="x_business_type"/>
-    <field name="create_date"/>
+    <field name="x_scope"/>
 </list>

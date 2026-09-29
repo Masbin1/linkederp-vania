@@ -1,72 +1,89 @@
-<form string="Incentive Period">
+<form>
     <header>
-        <button name="[ID VIF: Period Open]" type="action" string="Open" class="btn-primary"
-                invisible="x_state != 'draft'"/>
-        <button name="[ID VIF: Engine Calculate]" type="action" string="Calculate" class="btn-primary"
+        <button name="[ID VIF: Period Open]" type="action" string="Open"
+                class="btn-primary" invisible="x_state != 'draft'"/>
+        <button name="[ID VIF: Engine Calculate]" type="action" string="Calculate"
+                class="btn-primary"
                 invisible="x_state not in ('open', 'calculated')"/>
         <button name="[ID VIF: Period Approve]" type="action" string="Approve"
-                invisible="x_state != 'calculated'"/>
-        <button name="[ID VIF: Period Lock]" type="action" string="Lock"
-                invisible="x_state != 'approved'"
-                confirm="Lock this period? Payout figures become final."/>
+                class="btn-primary" invisible="x_state != 'calculated'"/>
+        <button name="[ID VIF: Period Lock]" type="action" string="Lock Period"
+                class="btn-danger" invisible="x_state != 'approved'"
+                confirm="Locking freezes every payout figure in this period. This cannot be undone. Continue?"/>
         <button name="[ID VIF: Period Reset to Open]" type="action" string="Reset to Open"
                 invisible="x_state not in ('calculated', 'approved')"/>
-        <button name="[ID VIF: Period Generate Next]" type="action" string="Generate Next Period"/>
-        <field name="x_state" widget="statusbar"/>
+        <button name="[ID VIF: Period Generate Next]" type="action"
+                string="Create Next Month" invisible="x_state == 'draft'"/>
+        <field name="x_state" widget="statusbar"
+               statusbar_visible="draft,open,calculated,approved,locked"/>
     </header>
     <sheet>
-        <div class="oe_title"><h1><field name="x_name" placeholder="Sep 2026"/></h1></div>
+        <div class="oe_button_box" name="button_box">
+            <button name="[ID VIF: Period View Targets]" type="action"
+                    class="oe_stat_button" icon="fa-crosshairs">
+                <field name="x_target_count" widget="statinfo" string="Targets"/>
+            </button>
+            <button name="[ID VIF: Period View Transactions]" type="action"
+                    class="oe_stat_button" icon="fa-list">
+                <field name="x_transaction_count" widget="statinfo" string="Transactions"/>
+            </button>
+            <button name="[ID VIF: Period View Payouts]" type="action"
+                    class="oe_stat_button" icon="fa-money">
+                <field name="x_payout_count" widget="statinfo" string="Payouts"/>
+            </button>
+        </div>
+        <widget name="web_ribbon" title="Locked" bg_color="text-bg-danger"
+                invisible="x_state != 'locked'"/>
+        <div class="oe_title">
+            <label for="x_name"/>
+            <h1><field name="x_name" placeholder="Jul 2025"/></h1>
+        </div>
         <group>
             <group>
-                <field name="x_date_start"/>
-                <field name="x_date_end"/>
+                <field name="x_date_start" readonly="x_state != 'draft'"/>
+                <field name="x_date_end" readonly="x_state != 'draft'"/>
             </group>
             <group>
-                <field name="x_rule_id"/>
-                <field name="x_company_id"/>
-                <field name="x_total_target"/>
-                <field name="x_total_payout"/>
+                <field name="x_rule_id" readonly="x_state not in ('draft', 'open')"/>
+                <field name="x_company_id" groups="base.group_multi_company"/>
                 <field name="x_currency_id" invisible="1"/>
             </group>
         </group>
+        <group string="Summary">
+            <group>
+                <field name="x_total_target" widget="monetary"/>
+            </group>
+            <group>
+                <field name="x_total_payout" widget="monetary"/>
+            </group>
+        </group>
         <notebook>
-            <page string="Branch Targets">
-                <field name="x_branch_target_ids">
-                    <list>
-                        <field name="x_branch_id"/>
-                        <field name="x_business_type"/>
-                        <field name="x_amount_total"/>
-                        <field name="x_payout_total"/>
-                        <field name="x_needs_recascade"/>
-                        <field name="x_state" widget="badge"/>
-                        <field name="x_currency_id" column_invisible="1"/>
-                    </list>
-                </field>
-            </page>
-            <page string="Targets">
-                <field name="x_target_ids" readonly="1">
-                    <list>
-                        <field name="x_employee_id"/>
-                        <field name="x_branch_id"/>
-                        <field name="x_target_type"/>
-                        <field name="x_amount" sum="Total"/>
-                        <field name="x_source"/>
-                        <field name="x_currency_id" column_invisible="1"/>
-                    </list>
-                </field>
-            </page>
-            <page string="Payouts">
-                <field name="x_payout_ids" readonly="1">
-                    <list>
-                        <field name="x_employee_id"/>
-                        <field name="x_branch_id"/>
-                        <field name="x_net_sales"/>
-                        <field name="x_achievement_pct" widget="percentage"/>
-                        <field name="x_tier_id"/>
-                        <field name="x_incentive_payout" sum="Total"/>
-                        <field name="x_payout_bonus" sum="Total"/>
-                        <field name="x_branch_payout" sum="Total"/>
-                        <field name="x_total_payout" sum="Total"/>
+            <page string="Branches" name="branches">
+                <field name="x_branch_target_ids" nolabel="1"
+                       context="{'default_x_period_id': id}">
+                    <list editable="bottom"
+                          decoration-muted="x_state == 'locked'"
+                          decoration-success="x_state == 'approved'">
+                        <field name="x_branch_id" readonly="x_state != 'draft'"/>
+                        <field name="x_business_type" readonly="x_state != 'draft'"/>
+                        <field name="x_amount" sum="Base Target"
+                               readonly="x_state != 'draft'"/>
+                        <field name="x_carry_forward_amount" sum="Carry-Forward"/>
+                        <field name="x_amount_total" sum="Total Target"/>
+                        <field name="x_payout_total" sum="Payout"/>
+                        <field name="x_state" widget="badge"
+                               decoration-info="x_state == 'calculated'"
+                               decoration-success="x_state == 'approved'"
+                               decoration-muted="x_state == 'locked'"/>
+                        <button name="[ID VIF: Branch Target Calculate]" type="action"
+                                string="Calculate" icon="fa-calculator"
+                                invisible="x_state not in ('draft', 'calculated')"/>
+                        <button name="[ID VIF: Branch Target Approve]" type="action"
+                                string="Approve" icon="fa-check"
+                                invisible="x_state != 'calculated'"/>
+                        <button name="[ID VIF: Branch Target Lock]" type="action"
+                                string="Lock" icon="fa-lock"
+                                invisible="x_state != 'approved'"/>
                         <field name="x_currency_id" column_invisible="1"/>
                     </list>
                 </field>

@@ -10,6 +10,8 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 
 ## 1. `x_incentive_designation` -- Incentive FTE Designation (model baru)
 
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_sequence, id`
+
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
 | 1 | `x_name` | Name | Char (Text) | Required |
@@ -22,6 +24,8 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 8 | `x_active` | Active | Boolean (Checkbox) |  |
 
 ## 2. `x_incentive_branch` -- Incentive Sales Branch (model baru)
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_sequence, x_code`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -53,8 +57,17 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
 | 1 | `x_incentive_employee_id` | Incentive Salesperson | Many2one | Model: `hr.employee`; On Delete: Set Null; Help: Filled by automation "VIF: Invoice Incentive Salesperson". Only used for invoices without a project. |
+| 2 | `x_incentive_full_payment_date` | Fully Paid On | Date | **Compute** `compute/c_move_full_payment_date.py`, Depends `payment_state`, Not stored |
 
-## 5. `x_incentive_rule` -- Incentive Rule Version (model baru)
+## 5. `account.move.line` (model standar -- tambah field)
+
+| # | Field Name | Label | Type | Detail |
+|---|---|---|---|---|
+| 1 | `x_incentive_eligible` | Incentive Eligible | Boolean (Checkbox) | **Compute** `compute/c_move_line_incentive_eligible.py`, Depends `discount,is_downpayment,move_id.invoice_date`, Not stored |
+
+## 6. `x_incentive_rule` -- Incentive Rule Version (model baru)
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_date_from desc`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -69,7 +82,9 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 9 | `x_cap_tier_in_mixed` | Cap Tier in Mixed Scenario | Boolean (Checkbox) |  |
 | 10 | `x_mixed_cap_tier_level` | Mixed Scenario Cap Level | Integer |  |
 
-## 6. `x_incentive_rule_tier` -- Incentive Tier (model baru)
+## 7. `x_incentive_rule_tier` -- Incentive Tier (model baru)
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_level`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -80,11 +95,15 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 5 | `x_achievement_max` | Achievement To | Float (Decimal) |  |
 | 6 | `x_is_top_tier` | Open-ended (Top Tier) | Boolean (Checkbox) |  |
 | 7 | `x_allocation` | Allocation | Float (Decimal) | Help: 0.4 = 40% of base rate |
-| 8 | `x_payout_rate` | Payout Rate | Float (Decimal) | **Compute** `compute/c_tier_payout_rate.py`, Depends `x_allocation,x_rule_id.x_base_rate`, Stored |
+| 8 | `x_base_rate` | Base Rate | Float (Decimal) | Related: `x_rule_id.x_base_rate` |
+| 9 | `x_payout_rate` | Payout Rate | Float (Decimal) | **Compute** `compute/c_tier_payout_rate.py`, Depends `x_allocation,x_rule_id.x_base_rate`, Stored |
+| 10 | `x_note` | Note | Char (Text) |  |
 
-## 7. `x_incentive_period` -- Incentive Period (model baru)
+## 8. `x_incentive_period` -- Incentive Period (model baru)
 
-**Chatter:** saat membuat model, centang **Has Mail Thread** dan **Has Mail Activity** (tidak bisa dimatikan lagi). Field dengan *Tracking* diisi di **Enable Ordered Tracking**.
+**Chatter:** di form Model, centang **Has Mail Thread** dan **Has Mail Activity** (tidak bisa dimatikan lagi). Field dengan *Tracking* diisi di **Enable Ordered Tracking**.
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_date_start desc`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -96,7 +115,9 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 6 | `x_rule_id` | Rule Version | Many2one | Model: `x_incentive_rule`; On Delete: Set Null; Tracking: 40 |
 | 7 | `x_state` | Status | Selection | Nilai: `draft`=Draft, `open`=Open, `calculated`=Calculated, `approved`=Approved, `locked`=Locked; Tracking: 50 |
 
-## 8. `x_incentive_branch_target` -- Incentive Branch Target (model baru)
+## 9. `x_incentive_branch_target` -- Incentive Branch Target (model baru)
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_period_id desc, x_branch_id, x_business_type`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -114,21 +135,25 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 12 | `x_needs_recascade` | Population Changed | Boolean (Checkbox) | **Compute** `compute/c_branch_target_needs_recascade.py`, Depends `x_recascade_reason`, Not stored |
 | 13 | `x_payout_total` | Branch Payout | Monetary | **Compute** `compute/c_branch_target_payout_total.py`, Depends `x_period_id,x_branch_id,x_business_type`, Not stored; Currency field: `x_currency_id` |
 
-## 9. `x_incentive_target` -- Incentive Target (model baru)
+## 10. `x_incentive_target` -- Incentive Target (model baru)
+
+**Chatter:** di form Model, centang **Has Mail Thread** (tidak bisa dimatikan lagi). Field dengan *Tracking* diisi di **Enable Ordered Tracking**.
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_period_id desc, x_employee_id, x_target_type`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
 | 1 | `x_name` | Name | Char (Text) | **Compute** `compute/c_target_name.py`, Depends `x_employee_id.name,x_target_type,x_period_id.x_name`, Stored |
-| 2 | `x_period_id` | Period | Many2one | Model: `x_incentive_period`; On Delete: Restrict; Required |
-| 3 | `x_employee_id` | Employee | Many2one | Model: `hr.employee`; On Delete: Restrict; Required |
+| 2 | `x_period_id` | Period | Many2one | Model: `x_incentive_period`; On Delete: Restrict; Required; Tracking: 10 |
+| 3 | `x_employee_id` | Employee | Many2one | Model: `hr.employee`; On Delete: Restrict; Required; Tracking: 20 |
 | 4 | `x_branch_id` | Branch | Many2one | Model: `x_incentive_branch`; On Delete: Set Null; Related: `x_employee_id.x_incentive_branch_id` (Stored) |
 | 5 | `x_business_type` | Business Type | Selection | Related: `x_employee_id.x_incentive_business_type` (Stored) |
 | 6 | `x_designation_id` | Designation | Many2one | Model: `x_incentive_designation`; On Delete: Set Null; Related: `x_employee_id.x_incentive_designation_id` (Stored) |
 | 7 | `x_company_id` | Company | Many2one | Model: `res.company`; On Delete: Set Null; Related: `x_period_id.x_company_id` (Stored) |
 | 8 | `x_currency_id` | Currency | Many2one | Model: `res.currency`; On Delete: Set Null; Related: `x_company_id.currency_id` |
-| 9 | `x_target_type` | Bucket | Selection | Nilai: `incentive`=Incentive-Based, `bonus`=Bonus-Based; Required |
-| 10 | `x_amount` | Amount | Monetary | Required; Currency field: `x_currency_id` |
-| 11 | `x_source` | Source | Selection | Nilai: `manual`=Manual Input, `rf_cascade`=Rolling Forecast Cascade, `redistribution`=Vacancy Redistribution, `proration`=New Hire Proration |
+| 9 | `x_target_type` | Bucket | Selection | Nilai: `incentive`=Incentive-Based, `bonus`=Bonus-Based; Required; Tracking: 30 |
+| 10 | `x_amount` | Amount | Monetary | Required; Currency field: `x_currency_id`; Tracking: 40 |
+| 11 | `x_source` | Source | Selection | Nilai: `manual`=Manual Input, `rf_cascade`=Rolling Forecast Cascade, `redistribution`=Vacancy Redistribution, `proration`=New Hire Proration; Tracking: 50 |
 | 12 | `x_fte_used` | FTE Used | Float (Decimal) | Readonly |
 | 13 | `x_date_effective_start` | Effective Start | Date |  |
 | 14 | `x_date_effective_end` | Effective End | Date |  |
@@ -138,24 +163,30 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 18 | `x_months_remaining` | Months Remaining | Integer | Readonly |
 | 19 | `x_note` | Note | Char (Text) |  |
 
-## 10. `x_incentive_target_movement` -- Incentive Target Movement (model baru)
+## 11. `x_incentive_target_movement` -- Incentive Target Movement (model baru)
+
+**Chatter:** di form Model, centang **Has Mail Thread** (tidak bisa dimatikan lagi). Field dengan *Tracking* diisi di **Enable Ordered Tracking**.
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_date_effective desc, id desc`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
 | 1 | `x_name` | Reference | Char (Text) |  |
 | 2 | `x_period_id` | Period | Many2one | Model: `x_incentive_period`; On Delete: Restrict; Required |
 | 3 | `x_target_id` | Resulting Target | Many2one | Model: `x_incentive_target`; On Delete: Set Null |
-| 4 | `x_reason` | Reason | Selection | Nilai: `resignation`=Resignation / Vacant, `new_hire`=New Hire Proration, `rf_revision`=Rolling Forecast Revision, `replacement`=Replacement Joined, `manual`=Manual Adjustment; Required |
-| 5 | `x_from_employee_id` | From | Many2one | Model: `hr.employee`; On Delete: Set Null |
-| 6 | `x_to_employee_id` | To | Many2one | Model: `hr.employee`; On Delete: Set Null |
+| 4 | `x_reason` | Reason | Selection | Nilai: `resignation`=Resignation / Vacant, `new_hire`=New Hire Proration, `rf_revision`=Rolling Forecast Revision, `replacement`=Replacement Joined, `manual`=Manual Adjustment; Required; Tracking: 10 |
+| 5 | `x_from_employee_id` | From | Many2one | Model: `hr.employee`; On Delete: Set Null; Tracking: 20 |
+| 6 | `x_to_employee_id` | To | Many2one | Model: `hr.employee`; On Delete: Set Null; Tracking: 30 |
 | 7 | `x_currency_id` | Currency | Many2one | Model: `res.currency`; On Delete: Set Null; Related: `x_period_id.x_company_id.currency_id` |
-| 8 | `x_amount` | Amount | Monetary | Required; Currency field: `x_currency_id` |
+| 8 | `x_amount` | Amount | Monetary | Required; Currency field: `x_currency_id`; Tracking: 40 |
 | 9 | `x_target_type` | Bucket | Selection | Nilai: `incentive`=Incentive-Based, `bonus`=Bonus-Based; Required |
 | 10 | `x_fte_share` | FTE Share | Float (Decimal) |  |
 | 11 | `x_date_effective` | Effective Date | Date |  |
 | 12 | `x_note` | Note | Char (Text) |  |
 
-## 11. `x_incentive_transaction` -- Incentive Transaction (model baru)
+## 12. `x_incentive_transaction` -- Incentive Transaction (model baru)
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_source_period_id desc, x_employee_id, id`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -194,10 +225,15 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 33 | `x_tier_id` | Tier (snapshot) | Many2one | Model: `x_incentive_rule_tier`; On Delete: Set Null |
 | 34 | `x_tier_payout_rate` | Payout Rate (snapshot) | Float (Decimal) |  |
 | 35 | `x_payout_amount` | Payout Amount | Monetary | Currency field: `x_currency_id` |
-| 36 | `x_reversal_of_id` | Reversal Of | Many2one | Model: `x_incentive_transaction`; On Delete: Set Null |
-| 37 | `x_state` | Status | Selection | Nilai: `draft`=Draft, `confirmed`=Confirmed, `paid_out`=Paid Out, `reversed`=Reversed |
+| 36 | `x_display_ref` | Display Ref | Char (Text) | **Compute** `compute/c_transaction_display_ref.py`, Depends `x_move_id.name,x_pos_order_id.pos_reference,x_product_id.name`, Not stored |
+| 37 | `x_reversal_of_id` | Reversal Of | Many2one | Model: `x_incentive_transaction`; On Delete: Set Null |
+| 38 | `x_state` | Status | Selection | Nilai: `draft`=Draft, `confirmed`=Confirmed, `paid_out`=Paid Out, `reversed`=Reversed |
 
-## 12. `x_incentive_payout` -- Incentive Payout (model baru)
+## 13. `x_incentive_payout` -- Incentive Payout (model baru)
+
+**Chatter:** di form Model, centang **Has Mail Thread** (tidak bisa dimatikan lagi). Field dengan *Tracking* diisi di **Enable Ordered Tracking**.
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_period_id desc, x_employee_id`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -205,7 +241,7 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 2 | `x_period_id` | Period | Many2one | Model: `x_incentive_period`; On Delete: Cascade; Required |
 | 3 | `x_employee_id` | Employee | Many2one | Model: `hr.employee`; On Delete: Restrict; Required |
 | 4 | `x_user_id` | User | Many2one | Model: `res.users`; On Delete: Set Null; Related: `x_employee_id.user_id` (Stored) |
-| 5 | `x_manager_id` | Manager | Many2one | Model: `hr.employee`; On Delete: Set Null; Related: `x_employee_id.parent_id` (Stored) |
+| 5 | `x_manager_id` | Manager | Many2one | Model: `hr.employee`; On Delete: Set Null; Related: `x_employee_id.parent_id` (Stored); Tracking: 10 |
 | 6 | `x_branch_id` | Branch | Many2one | Model: `x_incentive_branch`; On Delete: Set Null; Related: `x_employee_id.x_incentive_branch_id` (Stored) |
 | 7 | `x_business_type` | Business Type | Selection | Related: `x_employee_id.x_incentive_business_type` (Stored) |
 | 8 | `x_company_id` | Company | Many2one | Model: `res.company`; On Delete: Set Null; Related: `x_period_id.x_company_id` (Stored) |
@@ -248,7 +284,9 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 45 | `x_is_frozen` | Frozen | Boolean (Checkbox) | Readonly |
 | 46 | `x_computation_log` | Computation Log | Text (Multiline) | Readonly |
 
-## 13. `x_incentive_cascade` -- Cascade Branch Target (model baru)
+## 14. `x_incentive_cascade` -- Cascade Branch Target (model baru)
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `create_date desc`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -262,7 +300,7 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 8 | `x_currency_id` | Currency | Many2one | Model: `res.currency`; On Delete: Set Null; Related: `x_period_id.x_company_id.currency_id` |
 | 9 | `x_carry_forward_total` | Carry-Forward Total | Monetary | Readonly; Currency field: `x_currency_id` |
 
-## 14. `x_incentive_cascade_line` -- Cascade Preview Line (model baru)
+## 15. `x_incentive_cascade_line` -- Cascade Preview Line (model baru)
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -279,21 +317,26 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 11 | `x_incentive_amount` | Total Incentive | Monetary | Currency field: `x_currency_id` |
 | 12 | `x_bonus_amount` | Bonus | Monetary | Currency field: `x_currency_id` |
 
-## 15. `x_incentive_refund` -- Refund Incentive Transaction (model baru)
+## 16. `x_incentive_refund` -- Refund Incentive Transaction (model baru)
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `create_date desc`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
 | 1 | `x_name` | Name | Char (Text) |  |
 | 2 | `x_transaction_id` | Transaction | Many2one | Model: `x_incentive_transaction`; On Delete: Cascade; Required |
 | 3 | `x_move_id` | Invoice | Many2one | Model: `account.move`; On Delete: Set Null; Related: `x_transaction_id.x_move_id` |
-| 4 | `x_employee_id` | Employee | Many2one | Model: `hr.employee`; On Delete: Set Null; Related: `x_transaction_id.x_employee_id` |
-| 5 | `x_currency_id` | Currency | Many2one | Model: `res.currency`; On Delete: Set Null; Related: `x_transaction_id.x_currency_id` |
-| 6 | `x_base_amount` | Invoice Line Amount | Monetary | **Compute** `compute/c_refund_base_amount.py`, Depends `x_transaction_id`, Not stored; Currency field: `x_currency_id` |
-| 7 | `x_refundable_amount` | Refundable | Monetary | **Compute** `compute/c_refund_refundable_amount.py`, Depends `x_transaction_id`, Not stored; Currency field: `x_currency_id` |
-| 8 | `x_refund_amount` | Refund Amount | Monetary | Required; Currency field: `x_currency_id` |
-| 9 | `x_refund_move_id` | Credit Note | Many2one | Model: `account.move`; On Delete: Set Null; Readonly |
+| 4 | `x_move_line_id` | Invoice Line | Many2one | Model: `account.move.line`; On Delete: Set Null; Related: `x_transaction_id.x_move_line_id` |
+| 5 | `x_employee_id` | Employee | Many2one | Model: `hr.employee`; On Delete: Set Null; Related: `x_transaction_id.x_employee_id` |
+| 6 | `x_currency_id` | Currency | Many2one | Model: `res.currency`; On Delete: Set Null; Related: `x_transaction_id.x_currency_id` |
+| 7 | `x_base_amount` | Invoice Line Amount | Monetary | **Compute** `compute/c_refund_base_amount.py`, Depends `x_transaction_id`, Not stored; Currency field: `x_currency_id` |
+| 8 | `x_refundable_amount` | Refundable | Monetary | **Compute** `compute/c_refund_refundable_amount.py`, Depends `x_transaction_id`, Not stored; Currency field: `x_currency_id` |
+| 9 | `x_refund_amount` | Refund Amount | Monetary | Required; Currency field: `x_currency_id` |
+| 10 | `x_refund_move_id` | Credit Note | Many2one | Model: `account.move`; On Delete: Set Null; Readonly |
 
-## 16. `x_incentive_refund_policy` -- Incentive Refund Policy (model baru)
+## 17. `x_incentive_refund_policy` -- Incentive Refund Policy (model baru)
+
+**Order** (di form Model, isi SETELAH semua field model ini dibuat): `x_sequence, id`
 
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
@@ -315,6 +358,10 @@ Buat berurutan dari atas: field Compute di bawah membaca One2many di atasnya.
 | Model | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
 | `x_incentive_branch` | `x_employee_ids` | Sales Team | One2many | Model: `hr.employee`; Field relasi: `x_incentive_branch_id` |
+| `x_incentive_branch` | `x_employee_count` | Employee Count | Integer | **Compute** `compute/c_branch_employee_count.py`, Depends `x_employee_ids`, Not stored |
+| `x_incentive_branch` | `x_effective_fte_b2b` | FTE B2B | Float (Decimal) | **Compute** `compute/c_branch_effective_fte_b2b.py`, Depends `x_employee_ids.x_incentive_business_type,x_employee_ids.x_incentive_designation_id`, Not stored; Help: Today's weighted headcount of the B2B team in this branch. |
+| `x_incentive_branch` | `x_effective_fte_b2c` | FTE B2C | Float (Decimal) | **Compute** `compute/c_branch_effective_fte_b2c.py`, Depends `x_employee_ids.x_incentive_business_type,x_employee_ids.x_incentive_designation_id`, Not stored; Help: Today's weighted headcount of the B2C team in this branch. |
+| `x_incentive_branch` | `x_effective_fte` | Effective FTE | Float (Decimal) | **Compute** `compute/c_branch_effective_fte.py`, Depends `x_employee_ids.x_incentive_business_type,x_employee_ids.x_incentive_designation_id`, Not stored; Help: Today's weighted headcount of the whole branch, B2B and B2C together. |
 | `x_incentive_rule` | `x_tier_ids` | Tiers | One2many | Model: `x_incentive_rule_tier`; Field relasi: `x_rule_id` |
 | `x_incentive_period` | `x_branch_target_ids` | Branch Targets | One2many | Model: `x_incentive_branch_target`; Field relasi: `x_period_id` |
 | `x_incentive_period` | `x_target_ids` | Targets | One2many | Model: `x_incentive_target`; Field relasi: `x_period_id` |
@@ -324,6 +371,10 @@ Buat berurutan dari atas: field Compute di bawah membaca One2many di atasnya.
 | `x_incentive_cascade` | `x_line_ids` | Preview | One2many | Model: `x_incentive_cascade_line`; Field relasi: `x_cascade_id` |
 | `x_incentive_period` | `x_total_target` | Total Target | Monetary | **Compute** `compute/c_period_total_target.py`, Depends `x_target_ids.x_amount`, Not stored; Currency field: `x_currency_id` |
 | `x_incentive_period` | `x_total_payout` | Total Payout | Monetary | **Compute** `compute/c_period_total_payout.py`, Depends `x_payout_ids.x_total_payout`, Not stored; Currency field: `x_currency_id` |
+| `x_incentive_period` | `x_target_count` | Target Count | Integer | **Compute** `compute/c_period_target_count.py`, Depends `x_target_ids`, Not stored |
+| `x_incentive_period` | `x_payout_count` | Payout Count | Integer | **Compute** `compute/c_period_payout_count.py`, Depends `x_payout_ids`, Not stored |
+| `x_incentive_period` | `x_transaction_count` | Transaction Count | Integer | **Compute** `compute/c_period_transaction_count.py`, Depends `x_transaction_ids`, Not stored |
+| `x_incentive_target` | `x_movement_ids` | Movements | One2many | Model: `x_incentive_target_movement`; Field relasi: `x_target_id` |
 | `account.move` | `x_incentive_transaction_ids` | Incentive Transactions | One2many | Model: `x_incentive_transaction`; Field relasi: `x_move_id` |
 | `pos.order` | `x_incentive_transaction_ids` | Incentive Transactions | One2many | Model: `x_incentive_transaction`; Field relasi: `x_pos_order_id` |
 | `hr.employee` | `x_incentive_payout_ids` | Incentive Payouts | One2many | Model: `x_incentive_payout`; Field relasi: `x_employee_id` |

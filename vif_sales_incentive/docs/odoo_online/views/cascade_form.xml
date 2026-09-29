@@ -1,37 +1,41 @@
 <form string="Cascade Branch Target">
     <header>
-        <button name="[ID VIF: Cascade Preview]" type="action" string="Preview" class="btn-primary"/>
+        <button name="[ID VIF: Cascade Preview]" type="action" string="Preview"
+                class="btn-secondary"/>
         <button name="[ID VIF: Cascade Apply]" type="action" string="Apply"
-                confirm="Write these figures into the targets of this period?"/>
+                class="btn-primary"/>
     </header>
-    <sheet>
+    <group>
         <group>
-            <group>
-                <field name="x_period_id"/>
-                <field name="x_branch_ids" widget="many2many_tags"/>
-                <field name="x_business_type"/>
-            </group>
-            <group>
-                <field name="x_scope"/>
-                <field name="x_redistribute_vacant"/>
-                <field name="x_overwrite_existing"/>
-                <field name="x_carry_forward_total"/>
-                <field name="x_currency_id" invisible="1"/>
-            </group>
+            <field name="x_period_id"/>
+            <field name="x_branch_ids" widget="many2many_tags"
+                   options="{'no_create': True}"/>
+            <field name="x_business_type"/>
+            <field name="x_scope"/>
         </group>
-        <field name="x_line_ids" readonly="1">
-            <list>
-                <field name="x_branch_id"/>
-                <field name="x_employee_id"/>
-                <field name="x_designation_id"/>
-                <field name="x_fte"/>
-                <field name="x_proration"/>
-                <field name="x_base_amount" sum="Total"/>
-                <field name="x_carry_forward_amount" sum="Total"/>
-                <field name="x_incentive_amount" sum="Total"/>
-                <field name="x_bonus_amount" sum="Total"/>
-                <field name="x_currency_id" column_invisible="1"/>
-            </list>
-        </field>
-    </sheet>
+        <group>
+            <field name="x_carry_forward_total"/>
+            <field name="x_currency_id" invisible="1"/>
+            <field name="x_redistribute_vacant"/>
+            <field name="x_overwrite_existing"/>
+        </group>
+    </group>
+    <div class="alert alert-info" role="alert">
+        Each branch uses its own figure from
+        <b>Branch Targets</b> for this period. Enter them there first.
+    </div>
+    <field name="x_line_ids" readonly="1">
+        <list default_group_by="x_branch_id">
+            <field name="x_branch_id" column_invisible="1"/>
+            <field name="x_employee_id"/>
+            <field name="x_designation_id"/>
+            <field name="x_fte"/>
+            <field name="x_proration"/>
+            <field name="x_base_amount" sum="Base"/>
+            <field name="x_carry_forward_amount" sum="Carry-Forward"/>
+            <field name="x_incentive_amount" sum="Total Incentive"/>
+            <field name="x_bonus_amount" sum="Bonus"/>
+            <field name="x_currency_id" column_invisible="1"/>
+        </list>
+    </field>
 </form>

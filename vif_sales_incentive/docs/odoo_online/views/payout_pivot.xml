@@ -1,0 +1,6 @@
+<pivot>
+    <field name="x_branch_id" type="row"/>
+    <field name="x_period_id" type="col"/>
+    <field name="x_net_sales" type="measure"/>
+    <field name="x_total_payout" type="measure"/>
+</pivot>

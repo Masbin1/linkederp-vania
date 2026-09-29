@@ -4,20 +4,36 @@
     <xpath expr="//notebook" position="inside">
         <page string="Sales Incentive" name="x_sales_incentive">
             <group>
-                <group string="Team">
+                <group string="Sales Organisation">
                     <field name="x_incentive_branch_id"/>
                     <field name="x_incentive_business_type"/>
                     <field name="x_incentive_designation_id"/>
                     <field name="x_is_vacant_slot"/>
                     <field name="x_is_global_branch_member"/>
                 </group>
-                <group string="Dates">
+                <group string="Effective Dates">
                     <field name="x_incentive_date_start"/>
                     <field name="x_incentive_date_end"/>
+                </group>
+            </group>
+            <group string="Eligibility">
+                <group>
                     <field name="x_branch_incentive_eligible"/>
+                </group>
+                <group>
                     <field name="x_individual_incentive_eligible"/>
                 </group>
             </group>
+            <field name="x_incentive_payout_ids" readonly="1">
+                <list>
+                    <field name="x_period_id"/>
+                    <field name="x_net_sales"/>
+                    <field name="x_achievement_pct" widget="percentage"/>
+                    <field name="x_tier_id"/>
+                    <field name="x_total_payout"/>
+                    <field name="x_currency_id" column_invisible="1"/>
+                </list>
+            </field>
         </page>
     </xpath>
 </data>

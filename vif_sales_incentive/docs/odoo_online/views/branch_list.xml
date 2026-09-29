@@ -1,8 +1,12 @@
-<list string="Sales Branches">
+<list>
     <field name="x_sequence" widget="handle"/>
     <field name="x_code"/>
     <field name="x_name"/>
     <field name="x_manager_id"/>
     <field name="x_ideal_team_size_b2b"/>
     <field name="x_ideal_team_size_b2c"/>
+    <field name="x_employee_count"/>
+    <field name="x_effective_fte_b2b"/>
+    <field name="x_effective_fte_b2c"/>
+    <field name="x_company_id" groups="base.group_multi_company"/>
 </list>

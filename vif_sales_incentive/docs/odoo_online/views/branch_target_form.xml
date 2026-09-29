@@ -1,34 +1,48 @@
-<form string="Branch Target">
+<form>
     <header>
         <button name="[ID VIF: Branch Target Calculate]" type="action" string="Calculate"
-                class="btn-primary" invisible="x_state not in ('draft', 'calculated')"/>
+                class="btn-primary"
+                invisible="x_state not in ('draft', 'calculated')"/>
         <button name="[ID VIF: Branch Target Approve]" type="action" string="Approve"
-                invisible="x_state != 'calculated'"/>
-        <button name="[ID VIF: Branch Target Lock]" type="action" string="Lock"
-                invisible="x_state != 'approved'"
-                confirm="Lock this branch? Its payouts become final."/>
-        <button name="[ID VIF: Branch Target Reset to Draft]" type="action" string="Reset to Draft"
+                class="btn-primary" invisible="x_state != 'calculated'"/>
+        <button name="[ID VIF: Branch Target Lock]" type="action" string="Lock Branch"
+                class="btn-danger" invisible="x_state != 'approved'"
+                confirm="Locking freezes every payout figure for this branch. This cannot be undone. Continue?"/>
+        <button name="[ID VIF: Branch Target Reset to Draft]" type="action"
+                string="Reset to Draft"
                 invisible="x_state not in ('calculated', 'approved')"/>
-        <field name="x_state" widget="statusbar"/>
+        <field name="x_state" widget="statusbar"
+               statusbar_visible="draft,calculated,approved,locked"/>
     </header>
+    <div class="alert alert-warning" role="alert"
+         invisible="not x_needs_recascade">
+        <strong>The team changed since these targets were cascaded.</strong>
+        <field name="x_recascade_reason" class="d-block"/>
+        Calculate is blocked until the target cascade is re-run --
+        payouts are weighted by target and working days, so
+        calculating now would pay against a team that no longer
+        exists.
+    </div>
     <sheet>
-        <div class="alert alert-warning" role="alert" invisible="not x_needs_recascade">
-            <strong>Population changed:</strong> <field name="x_recascade_reason" nolabel="1"/>
-            -- re-run the Cascade before calculating.
-        </div>
+        <widget name="web_ribbon" title="Locked" bg_color="text-bg-danger"
+                invisible="x_state != 'locked'"/>
         <field name="x_needs_recascade" invisible="1"/>
+        <div class="oe_title">
+            <h1><field name="x_branch_id" readonly="x_state != 'draft'"/></h1>
+            <h3><field name="x_period_id" readonly="x_state != 'draft'"/></h3>
+        </div>
         <group>
-            <group>
-                <field name="x_period_id"/>
-                <field name="x_branch_id"/>
-                <field name="x_business_type"/>
-            </group>
-            <group>
-                <field name="x_amount"/>
+            <group string="Rolling Forecast">
+                <field name="x_business_type" readonly="x_state != 'draft'"/>
+                <field name="x_amount" readonly="x_state != 'draft'"/>
                 <field name="x_carry_forward_amount"/>
-                <field name="x_amount_total"/>
-                <field name="x_payout_total"/>
+                <field name="x_amount_total"
+                       class="oe_subtotal_footer_separator"/>
                 <field name="x_currency_id" invisible="1"/>
+            </group>
+            <group string="Result">
+                <field name="x_payout_total"/>
+                <field name="x_company_id" groups="base.group_multi_company"/>
             </group>
         </group>
     </sheet>

@@ -1,74 +1,83 @@
-<form string="Incentive Payout" create="0" edit="0">
+<form>
+    <header>
+        <button name="[ID VIF: Payout Recompute]" type="action" string="Recompute"
+                class="btn-primary" invisible="x_is_frozen"/>
+    </header>
     <sheet>
-        <div class="oe_title"><h1><field name="x_employee_id"/></h1></div>
+        <div class="oe_button_box" name="button_box">
+            <button name="[ID VIF: Payout View Transactions]" type="action"
+                    class="oe_stat_button" icon="fa-list"
+                    string="Transactions"/>
+        </div>
+        <widget name="web_ribbon" title="Frozen" bg_color="text-bg-danger"
+                invisible="not x_is_frozen"/>
+        <div class="oe_title">
+            <h1><field name="x_employee_id" readonly="1"/></h1>
+            <h3><field name="x_period_id" readonly="1"/></h3>
+        </div>
         <group>
+            <group string="Target">
+                <field name="x_target_incentive"/>
+                <field name="x_target_bonus"/>
+                <field name="x_target_total"/>
+                <field name="x_is_mixed"/>
+                <field name="x_currency_id" invisible="1"/>
+            </group>
+            <group string="Sequence 1 -- Tier">
+                <field name="x_gross_sales"/>
+                <field name="x_sales_return"/>
+                <field name="x_net_sales"/>
+                <field name="x_achievement_pct" widget="percentage"/>
+                <field name="x_tier_id"/>
+                <field name="x_payout_rate" digits="[16,6]"/>
+            </group>
+        </group>
+        <group>
+            <group string="Sequence 2 -- Eligible Base (discount gate)">
+                <field name="x_eligible_incentive"/>
+                <field name="x_eligible_bonus"/>
+                <field name="x_excluded_discount"/>
+            </group>
+            <group string="Sequence 3 -- Fully Paid Base">
+                <field name="x_paid_prior_month"/>
+                <field name="x_paid_current_month"/>
+                <field name="x_paid_bonus"/>
+            </group>
+        </group>
+        <group string="Payout">
             <group>
-                <field name="x_period_id"/>
-                <field name="x_branch_id"/>
-                <field name="x_business_type"/>
-                <field name="x_manager_id"/>
+                <field name="x_payout_prior"/>
+                <field name="x_payout_current"/>
+                <field name="x_incentive_payout"/>
+                <field name="x_payout_bonus"/>
+                <field name="x_branch_payout"/>
             </group>
             <group>
-                <field name="x_total_payout"/>
+                <field name="x_total_payout" class="oe_subtotal_footer_separator"/>
                 <field name="x_is_eligible"/>
                 <field name="x_is_frozen"/>
-                <field name="x_currency_id" invisible="1"/>
+            </group>
+        </group>
+        <group string="Branch Stream">
+            <group>
+                <field name="x_branch_target"/>
+                <field name="x_branch_net_sales"/>
+                <field name="x_branch_achievement_pct" widget="percentage"/>
+                <field name="x_branch_tier_id"/>
+                <field name="x_branch_payout_rate" digits="[16,6]"/>
+            </group>
+            <group>
+                <field name="x_branch_pool" string="Team Payout Pool"/>
+                <field name="x_branch_fte"/>
+                <field name="x_branch_fte_share" widget="percentage"/>
+                <field name="x_branch_payout" class="oe_subtotal_footer_separator"/>
             </group>
         </group>
         <notebook>
-            <page string="Individual">
-                <group>
-                    <group string="Targets">
-                        <field name="x_target_incentive"/>
-                        <field name="x_target_bonus"/>
-                        <field name="x_target_total"/>
-                        <field name="x_is_mixed"/>
-                    </group>
-                    <group string="SQ1 - Tier">
-                        <field name="x_gross_sales"/>
-                        <field name="x_sales_return"/>
-                        <field name="x_net_sales"/>
-                        <field name="x_achievement_pct" widget="percentage"/>
-                        <field name="x_tier_id"/>
-                        <field name="x_payout_rate"/>
-                    </group>
-                    <group string="SQ2 - Eligible">
-                        <field name="x_eligible_incentive"/>
-                        <field name="x_eligible_bonus"/>
-                        <field name="x_excluded_discount"/>
-                    </group>
-                    <group string="SQ3 - Paid &amp; Payout">
-                        <field name="x_paid_current_month"/>
-                        <field name="x_paid_prior_month"/>
-                        <field name="x_paid_bonus"/>
-                        <field name="x_payout_current"/>
-                        <field name="x_payout_prior"/>
-                        <field name="x_incentive_payout"/>
-                        <field name="x_payout_bonus"/>
-                    </group>
-                </group>
-            </page>
-            <page string="Branch">
-                <group>
-                    <group>
-                        <field name="x_branch_target"/>
-                        <field name="x_branch_net_sales"/>
-                        <field name="x_branch_achievement_pct" widget="percentage"/>
-                        <field name="x_branch_tier_id"/>
-                        <field name="x_branch_payout_rate"/>
-                    </group>
-                    <group>
-                        <field name="x_branch_pool"/>
-                        <field name="x_branch_fte"/>
-                        <field name="x_branch_fte_share"/>
-                        <field name="x_branch_paid"/>
-                        <field name="x_branch_payout"/>
-                    </group>
-                </group>
-            </page>
-            <page string="Computation Log">
-                <field name="x_computation_log"/>
+            <page string="Calculation Log">
+                <field name="x_computation_log" widget="text" readonly="1"/>
             </page>
         </notebook>
     </sheet>
+    <chatter/>
 </form>

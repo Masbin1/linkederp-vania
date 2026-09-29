@@ -1,11 +1,11 @@
-<list string="Refund Policies" editable="bottom">
+<list editable="bottom">
     <field name="x_sequence" widget="handle"/>
     <field name="x_name"/>
     <field name="x_stock_type"/>
-    <field name="x_is_wip"/>
+    <field name="x_is_wip" widget="boolean_toggle"/>
     <field name="x_payment_status"/>
     <field name="x_initiator"/>
     <field name="x_refund_pct"/>
-    <field name="x_by_agreement"/>
+    <field name="x_by_agreement" widget="boolean_toggle"/>
     <field name="x_note"/>
 </list>

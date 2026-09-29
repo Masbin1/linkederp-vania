@@ -71,15 +71,23 @@ Untuk setiap model di [FIELDS.md](FIELDS.md), dengan urutan yang sama:
 
 1. **Model Description**: isi label, misalnya `Incentive Period`
 2. **Model**: isi nama teknis persis, misalnya `x_incentive_period`
-3. **Khusus `x_incentive_period`**: centang **Has Mail Thread** dan **Has Mail Activity**, supaya form Period punya chatter (riwayat siapa Open/Approve/Lock dan kapan). Kalau modelnya sudah terlanjur dibuat, buka lagi dan centang sekarang, karena data lama tetap aman. Setelah dicentang, Odoo tidak mengizinkannya dimatikan lagi.
+3. **Chatter** (sama seperti modul): centang **Has Mail Thread** di model berikut. Kalau modelnya sudah terlanjur dibuat, buka lagi dan centang sekarang, karena data lama tetap aman. Setelah dicentang, Odoo tidak mengizinkannya dimatikan lagi.
+
+   | Model | Has Mail Thread | Has Mail Activity |
+   |---|---|---|
+   | `x_incentive_period` | ✓ | ✓ |
+   | `x_incentive_payout` | ✓ | |
+   | `x_incentive_target` | ✓ | |
+   | `x_incentive_target_movement` | ✓ | |
 4. **Save**. Odoo otomatis menambahkan field `x_name`.
 5. Buka tab **Fields**, lalu tambah field sesuai tabel (lihat bagian 3)
+6. **Order** (urutan default list, sama dengan `_order` modul): setelah **semua** field model itu dibuat, isi field **Order** di form Model sesuai baris *Order* di `FIELDS.md`. Contohnya `x_date_start desc` untuk Period. Odoo menolak Order yang menyebut field yang belum ada.
 
 Urutan pembuatan (sesuai `FIELDS.md`):
 1. `x_incentive_designation`
 2. `x_incentive_branch`
 3. field di `hr.employee` (bagian 4)
-4. field di `account.move`
+4. field di `account.move` dan `account.move.line`
 5. `x_incentive_rule`
 6. `x_incentive_rule_tier`
 7. `x_incentive_period`
@@ -92,7 +100,7 @@ Urutan pembuatan (sesuai `FIELDS.md`):
 14. `x_incentive_cascade_line`
 15. `x_incentive_refund`
 16. `x_incentive_refund_policy`
-17. terakhir: semua field **One2many**, lalu `x_total_target` / `x_total_payout` di Period (keduanya membaca One2many Targets / Payouts)
+17. terakhir: tabel **"One2many & field yang membacanya"** di `FIELDS.md`, dari atas ke bawah. Field Compute di tabel itu (jumlah & FTE di Branch; total & jumlah Targets/Payouts/Transactions di Period) membaca One2many di atasnya, jadi harus dibuat sesudahnya.
 
 ---
 
@@ -128,7 +136,9 @@ Tips:
 Masih lewat Settings → Technical → Fields → New, dengan **Model** = model standar:
 
 - **Employee (`hr.employee`)**: 9 field incentive. Dua di antaranya Compute (`x_branch_incentive_eligible`, `x_individual_incentive_eligible`) dengan **Stored** dan **Readonly OFF**.
-- **Journal Entry (`account.move`)**: `x_incentive_employee_id` (Many2one ke Employee, **bukan** Compute).
+- **Journal Entry (`account.move`)**: `x_incentive_employee_id` (Many2one ke Employee, **bukan** Compute) dan `x_incentive_full_payment_date` (Compute, **Not stored**).
+- **Journal Item (`account.move.line`)**: `x_incentive_eligible` (Compute, **Not stored**), kolom "Inc. Eligible" di baris invoice.
+- Kedua Compute di tabel besar ini sengaja **tidak disimpan** (Stored OFF). Kalau Stored dicentang, Odoo menghitungnya untuk semua journal entry sekaligus dan bisa timeout (aturan 8).
 - Setelah semua model ada: field One2many di `account.move`, `pos.order`, dan `hr.employee` (tabel "One2many" di akhir `FIELDS.md`).
 
 ---
@@ -163,7 +173,12 @@ Untuk setiap baris di tabel berikut:
 | `VIF: Period Approve` | `x_incentive_period` | `sa_period_approve.py` | Period → Approve |
 | `VIF: Period Lock` | `x_incentive_period` | `sa_period_lock.py` | Period → Lock |
 | `VIF: Period Reset to Open` | `x_incentive_period` | `sa_period_reset.py` | Period → Reset |
-| `VIF: Period Generate Next` | `x_incentive_period` | `sa_period_generate_next.py` | Period → Generate Next |
+| `VIF: Period Generate Next` | `x_incentive_period` | `sa_period_generate_next.py` | Period → Create Next Month |
+| `VIF: Period View Targets` | `x_incentive_period` | `sa_period_view_targets.py` | Period → smart button Targets |
+| `VIF: Period View Transactions` | `x_incentive_period` | `sa_period_view_transactions.py` | Period → smart button Transactions |
+| `VIF: Period View Payouts` | `x_incentive_period` | `sa_period_view_payouts.py` | Period → smart button Payouts |
+| `VIF: Payout Recompute` | `x_incentive_payout` | `sa_payout_recompute.py` | Payout → Recompute |
+| `VIF: Payout View Transactions` | `x_incentive_payout` | `sa_payout_view_transactions.py` | Payout → smart button Transactions |
 | `VIF: Branch Target Calculate` | `x_incentive_branch_target` | `sa_bt_calculate.py` | Branch Target → Calculate |
 | `VIF: Branch Target Approve` | `x_incentive_branch_target` | `sa_bt_approve.py` | Branch Target → Approve |
 | `VIF: Branch Target Lock` | `x_incentive_branch_target` | `sa_bt_lock.py` | Branch Target → Lock |
@@ -198,6 +213,8 @@ Untuk `VIF: Backfill Invoice Salesperson`, klik **Create Contextual Action** sup
 6. **Payout branch**: pool dibagi berdasarkan FTE × rate tier branch; global member ikut di semua branch.
 7. Hitung total, lalu ubah status menjadi **Calculated**.
 
+Tombol **Recompute** di Payout memakai engine yang sama dengan context `vif_recompute_payout_id`. Engine hanya menjalankan langkah 5 untuk orang itu, ditambah totalnya. Transaksi tidak dibuat ulang, branch payout tidak dihitung, dan status tidak berubah. Perilakunya sama dengan `action_recompute` di modul.
+
 ---
 
 ## 7. Automation Rule (validasi & otomatisasi)
@@ -223,25 +240,27 @@ Untuk setiap baris:
 
 ---
 
-## 8. View (form, list, search)
+## 8. View (form, list, search, pivot, graph)
 
 **Menu:** Settings → Technical → User Interface → **Views** → New
 
-1. **View Name** dan **View Type** (Form / List / Search) sesuai tabel
+Setiap file di `views/` adalah terjemahan **1:1** dari view modul (`vif_sales_incentive/views/*.xml` dan `wizards/*_views.xml`). Field, kolom, tombol, smart button, tab, filter, group by, dekorasi warna, dan chatter-nya sama; yang berbeda hanya awalan `x_` dan tombol yang memanggil server action.
+
+1. **View Name** dan **View Type** (Form / List / Search / Pivot / Graph) sesuai tabel
 2. **Model**: nama teknis model
 3. **Architecture**: paste isi file dari folder `views/`
 4. **Ganti setiap `[ID Nama Action]`** dengan ID server action dari bagian 6. Contoh: `name="[ID VIF: Engine Calculate]"` menjadi `name="512"`.
-5. Untuk view **inherit** (baris dengan kolom Inherit terisi): isi **Inherited View** sesuai kolom Inherit. View ini menambah tab "Sales Incentive" di form Employee, field "Incentive Salesperson" dan tab "Incentive" di invoice, serta tab "Incentive" di order POS.
+5. Untuk view **inherit** (baris dengan kolom Inherit terisi): isi **Inherited View** sesuai kolom Inherit. View ini menambah tab "Sales Incentive" di form Employee; field "Incentive Salesperson", "Fully Paid On", dan kolom "Inc. Eligible" di invoice; serta daftar transaksi insentif di bawah Cashier pada order POS.
 
 | File | Model | Type | Inherit |
 |---|---|---|---|
 | `period_form.xml` / `period_list.xml` | `x_incentive_period` | form / list | |
-| `branch_target_form.xml` / `branch_target_list.xml` | `x_incentive_branch_target` | form / list | |
+| `branch_target_form.xml` / `branch_target_list.xml` / `branch_target_search.xml` | `x_incentive_branch_target` | form / list / search | |
 | `cascade_form.xml` / `cascade_list.xml` | `x_incentive_cascade` | form / list | |
-| `target_list.xml` | `x_incentive_target` | list (editable) | |
+| `target_list.xml` / `target_search.xml` | `x_incentive_target` | list (editable) / search | |
 | `movement_form.xml` / `movement_list.xml` | `x_incentive_target_movement` | form / list | |
-| `transaction_form.xml` / `transaction_list.xml` / `transaction_search.xml` | `x_incentive_transaction` | form / list / search | |
-| `payout_form.xml` / `payout_list.xml` / `payout_search.xml` | `x_incentive_payout` | form / list / search | |
+| `transaction_form.xml` / `transaction_list.xml` / `transaction_search.xml` / `transaction_pivot.xml` | `x_incentive_transaction` | form / list / search / pivot | |
+| `payout_form.xml` / `payout_list.xml` / `payout_search.xml` / `payout_pivot.xml` / `payout_graph.xml` | `x_incentive_payout` | form / list / search / pivot / graph | |
 | `refund_form.xml` | `x_incentive_refund` | form | |
 | `rule_form.xml` / `rule_list.xml` | `x_incentive_rule` | form / list | |
 | `branch_form.xml` / `branch_list.xml` | `x_incentive_branch` | form / list | |
@@ -264,37 +283,39 @@ Setelah view ada, **Studio** bisa dipakai untuk merapikan tampilan (pindah kolom
    | Incentive Periods | `x_incentive_period` | list,form | | |
    | Branch Targets | `x_incentive_branch_target` | list,form | | |
    | Cascade Branch Target | `x_incentive_cascade` | list,form | | |
-   | Targets | `x_incentive_target` | list | | |
+   | Incentive Targets | `x_incentive_target` | list,form | | |
    | Target Movements | `x_incentive_target_movement` | list,form | | |
-   | Payouts | `x_incentive_payout` | list,form | | `{'search_default_g_period': 1}` |
-   | My Incentive | `x_incentive_payout` | list,form | `[('x_employee_id.user_id', '=', uid)]` | |
-   | Transactions | `x_incentive_transaction` | list,form | | |
-   | Rules & Tiers | `x_incentive_rule` | list,form | | |
+   | Incentive Payouts | `x_incentive_payout` | list,pivot,graph,form | | |
+   | My Incentive | `x_incentive_payout` | list,form | `[('x_user_id', '=', uid)]` | |
+   | Incentive Transactions | `x_incentive_transaction` | list,pivot,form | | |
+   | Incentive Rules | `x_incentive_rule` | list,form | | |
    | Sales Branches | `x_incentive_branch` | list,form | | |
-   | FTE Designations | `x_incentive_designation` | list | | |
-   | Refund Policies | `x_incentive_refund_policy` | list | | |
+   | FTE Designations | `x_incentive_designation` | list,form | | |
+   | Refund Policies | `x_incentive_refund_policy` | list,form | | |
 
-2. **Menu**: Settings → Technical → User Interface → **Menu Items** → New
+   Search view tidak perlu dipilih di action. Setiap model hanya punya satu search view, dan Odoo otomatis memakainya.
+
+2. **Menu**: Settings → Technical → User Interface → **Menu Items** → New. Susunan, urutan (Sequence), dan Groups-nya sama dengan modul:
 
    ```
-   Sales Incentive                      (menu utama, tanpa action)
-   ├── Operations
-   │   ├── Incentive Periods            -> Incentive Periods
-   │   ├── Branch Targets               -> Branch Targets
-   │   ├── Cascade Branch Target        -> Cascade Branch Target
-   │   ├── Targets                      -> Targets
-   │   └── Target Movements             -> Target Movements
-   ├── Reporting
-   │   ├── My Incentive                 -> My Incentive
-   │   ├── Payouts                      -> Payouts
-   │   └── Transactions                 -> Transactions
-   └── Configuration
-       ├── Rules & Tiers                -> Rules & Tiers
-       ├── Sales Branches               -> Sales Branches
-       ├── FTE Designations             -> FTE Designations
-       └── Refund Policies              -> Refund Policies
+   Sales Incentive  (seq 85, Groups: VIF Incentive / Salesperson)
+   ├── Operations  (seq 10)
+   │   ├── My Incentive           (5)  -> My Incentive
+   │   ├── Incentive Periods      (10) -> Incentive Periods        [Administrator]
+   │   ├── Targets                (20) -> Incentive Targets
+   │   ├── Cascade Branch Target  (25) -> Cascade Branch Target    [Administrator]
+   │   ├── Branch Targets         (27) -> Branch Targets           [Administrator]
+   │   └── Target Movements       (30) -> Target Movements         [Administrator]
+   ├── Reporting  (seq 20)
+   │   ├── Payouts                (10) -> Incentive Payouts
+   │   └── Transactions           (20) -> Incentive Transactions
+   └── Configuration  (seq 90, Groups: VIF Incentive / Administrator)
+       ├── Rules & Tiers          (10) -> Incentive Rules
+       ├── Sales Branches         (20) -> Sales Branches
+       ├── FTE Designations       (30) -> FTE Designations
+       └── Refund Policies        (40) -> Refund Policies
    ```
-   Isi **Groups** di menu Configuration dan Operations = `VIF Incentive / Administrator`.
+   `[Administrator]` = isi **Groups** menu itu dengan `VIF Incentive / Administrator`. Group baru dibuat di bagian 10, jadi isi Groups menu setelah bagian 10 selesai.
 
 ---
 
@@ -344,7 +365,7 @@ Isi CSV sudah disamakan dengan konfigurasi di database klien sekarang (designati
 
 ## 12. Operasional Bulanan
 
-Sama seperti panduan user (`PANDUAN_USER_VIF_SALES_INCENTIVE.md`). Menu dan tombolnya bernama sama. Perbedaannya hanya:
+Sama seperti panduan user (`PANDUAN_USER_VIF_SALES_INCENTIVE.md`). Menu, tombol, dan label kolomnya sama. Penjelasan rumus setiap angka juga berlaku di Online: contoh perhitungan lengkap ada di **§32**, dan kamus rumus setiap kolom Target / Payout / Transaction ada di **§33**. Perbedaannya hanya:
 - **Credit note** baru masuk transaksi insentif saat **Calculate** berikutnya. Di modul Python, credit note langsung masuk saat di-post. Hasil akhirnya sama.
 - Kalau Calculate satu periode terasa lambat atau timeout, lihat bagian 14.
 

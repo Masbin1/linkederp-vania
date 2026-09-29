@@ -1,5 +1,5 @@
 # Server Action : "VIF: Period Generate Next"   Model: x_incentive_period
-# Button        : Generate Next Period
+# Button        : Create Next Month
 rd = dateutil.relativedelta.relativedelta
 new = env['x_incentive_period']
 for rec in records:

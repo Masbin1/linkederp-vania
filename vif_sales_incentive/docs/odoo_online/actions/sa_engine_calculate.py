@@ -8,6 +8,8 @@
 # Called by      : button Calculate on Incentive Period   -> whole period
 #                  button Calculate on Branch Target      -> that branch only
 #                  (context key vif_branch_target_id)
+#                  button Recompute on Incentive Payout   -> that payout only
+#                  (context key vif_recompute_payout_id)
 #
 # Port of: incentive.transaction._generate_for_period / _generate_pos_for_period,
 #          incentive.period._check_credited_employees,
@@ -29,6 +31,10 @@ period = record
 if not period:
     raise UserError('Run this action from an Incentive Period.')
 only_bt = BranchTarget.browse(env.context.get('vif_branch_target_id') or [])
+# Recompute button on one payout (context vif_recompute_payout_id): re-runs
+# that employee's individual stream only -- no transaction refresh, no
+# branch stream, no state change. Same as incentive.payout.action_recompute.
+only_payout = Payout.browse(env.context.get('vif_recompute_payout_id') or [])
 
 # Project split: (role, user field on project, commission share field).
 # The Salesperson 2/3 and share fields are the client's Studio fields.
@@ -285,7 +291,17 @@ if not rule:
 company = period.x_company_id or env.company
 max_discount = rule.x_max_discount
 
-if only_bt:
+if only_payout:
+    # Recompute button (module: incentive.payout.action_recompute)
+    if only_payout.x_is_frozen:
+        raise UserError('Payout for %s in %s is frozen -- the accounting period is '
+                        'closed.' % (only_payout.x_employee_id.name, period.x_name))
+    rbt = bt_for_employee(only_payout.x_employee_id)
+    if rbt and is_closed(rbt):
+        raise UserError('Branch target %s is %s -- reset it to draft before '
+                        'recomputing.' % (rbt.x_name, rbt.x_state))
+    check_bts = BranchTarget
+elif only_bt:
     if only_bt.x_state == 'locked' or period.x_state in ('approved', 'locked'):
         raise UserError('Branch target %s is locked.' % only_bt.x_name)
     if only_bt.x_state == 'approved':
@@ -306,241 +322,242 @@ if stale_bts:
 # ---------------------------------------------------------------------
 # 1. Invoice transactions (one row per invoice line x credited employee)
 # ---------------------------------------------------------------------
-lines = env['account.move.line'].search([
-    ('move_id.state', '=', 'posted'),
-    ('move_id.move_type', 'in', ('out_invoice', 'out_refund')),
-    ('move_id.invoice_date', '>=', period.x_date_start),
-    ('move_id.invoice_date', '<=', period.x_date_end),
-    ('display_type', '=', 'product'),
-    ('company_id', '=', company.id),
-])
-existing = {}
-for t in Tx.search([('x_move_line_id', 'in', lines.ids)]):
-    existing[(t.x_move_line_id.id, t.x_employee_id.id)] = t
+if not only_payout:
+    lines = env['account.move.line'].search([
+        ('move_id.state', '=', 'posted'),
+        ('move_id.move_type', 'in', ('out_invoice', 'out_refund')),
+        ('move_id.invoice_date', '>=', period.x_date_start),
+        ('move_id.invoice_date', '<=', period.x_date_end),
+        ('display_type', '=', 'product'),
+        ('company_id', '=', company.id),
+    ])
+    existing = {}
+    for t in Tx.search([('x_move_line_id', 'in', lines.ids)]):
+        existing[(t.x_move_line_id.id, t.x_employee_id.id)] = t
 
-kept_ids = []
-for line in lines:
-    move = line.move_id
-    is_refund = move.move_type == 'out_refund'
-    sign = -1 if is_refund else 1
-    for item in line_split(line):
-        emp = item[0]
-        share = item[1]
-        vals = {
-            'x_name': '%s / %s' % (move.name or '-', line.product_id.display_name or '-'),
-            'x_source_type': 'invoice',
-            'x_move_line_id': line.id,
-            'x_move_id': move.id,
-            'x_employee_id': emp.id,
-            'x_company_id': company.id,
-            'x_partner_id': move.partner_id.id,
-            'x_product_id': line.product_id.id,
-            'x_invoice_date': move.invoice_date,
-            'x_source_period_id': period.id,
-            'x_transaction_type': 'refund' if is_refund else 'invoice',
-            # Credit note lines are stored positive -> negate. The DP negation
-            # line on a final invoice is already negative and stays so.
-            'x_base_amount': line.currency_id.round(sign * line.price_subtotal * share),
-            'x_split_share': share,
-            'x_split_role': item[2],
-            'x_project_id': item[3].id or False,
-            'x_discount': line.discount,
-            'x_is_downpayment': line.is_downpayment,
-            'x_is_discount_eligible': line.discount <= max_discount,
-            'x_eligibility_note': (
-                'Line discount %.2f%% exceeds the %.2f%% cap.' % (line.discount, max_discount)
-                if line.discount > max_discount else False),
-            'x_state': 'confirmed',
-        }
-        ex = existing.get((line.id, emp.id))
-        if ex:
-            if ex.x_state == 'paid_out':
-                continue
-            ex.write(vals)
-            kept_ids.append(ex.id)
-        else:
-            kept_ids.append(Tx.create(vals).id)
+    kept_ids = []
+    for line in lines:
+        move = line.move_id
+        is_refund = move.move_type == 'out_refund'
+        sign = -1 if is_refund else 1
+        for item in line_split(line):
+            emp = item[0]
+            share = item[1]
+            vals = {
+                'x_name': '%s / %s' % (move.name or '-', line.product_id.display_name or '-'),
+                'x_source_type': 'invoice',
+                'x_move_line_id': line.id,
+                'x_move_id': move.id,
+                'x_employee_id': emp.id,
+                'x_company_id': company.id,
+                'x_partner_id': move.partner_id.id,
+                'x_product_id': line.product_id.id,
+                'x_invoice_date': move.invoice_date,
+                'x_source_period_id': period.id,
+                'x_transaction_type': 'refund' if is_refund else 'invoice',
+                # Credit note lines are stored positive -> negate. The DP negation
+                # line on a final invoice is already negative and stays so.
+                'x_base_amount': line.currency_id.round(sign * line.price_subtotal * share),
+                'x_split_share': share,
+                'x_split_role': item[2],
+                'x_project_id': item[3].id or False,
+                'x_discount': line.discount,
+                'x_is_downpayment': line.is_downpayment,
+                'x_is_discount_eligible': line.discount <= max_discount,
+                'x_eligibility_note': (
+                    'Line discount %.2f%% exceeds the %.2f%% cap.' % (line.discount, max_discount)
+                    if line.discount > max_discount else False),
+                'x_state': 'confirmed',
+            }
+            ex = existing.get((line.id, emp.id))
+            if ex:
+                if ex.x_state == 'paid_out':
+                    continue
+                ex.write(vals)
+                kept_ids.append(ex.id)
+            else:
+                kept_ids.append(Tx.create(vals).id)
 
-# People no longer credited on these lines (project changed, old 100% row).
-Tx.search([
-    ('x_source_type', '=', 'invoice'),
-    ('x_move_line_id', 'in', lines.ids),
-    ('x_state', 'not in', ('paid_out', 'reversed')),
-    ('id', 'not in', kept_ids),
-]).unlink()
-
-# Payment stamps: this period's rows + every older row still waiting.
-pending = Tx.search([
-    ('x_source_type', '=', 'invoice'),
-    ('x_company_id', '=', company.id),
-    ('x_source_period_id.x_date_start', '<=', period.x_date_start),
-    ('x_state', '!=', 'paid_out'),
-])
-paid_cache = {}
-for t in pending:
-    move = t.x_move_id
-    if not move:
-        continue
-    if move.id not in paid_cache:
-        paid_cache[move.id] = full_paid_date(move)
-    paid_on = paid_cache[move.id]
-    if not paid_on:
-        t.write({'x_is_payment_eligible': False, 'x_payment_date': False,
-                 'x_payment_period_id': False, 'x_is_prior_period': False})
-        continue
-    pay_period = period_for_date(paid_on)
-    t.write({
-        'x_is_payment_eligible': True,
-        'x_payment_date': paid_on,
-        'x_payment_period_id': pay_period.id or False,
-        'x_payout_period_id': pay_period.id or False,
-        'x_is_prior_period': bool(
-            pay_period and t.x_source_period_id
-            and pay_period.x_date_start > t.x_source_period_id.x_date_start),
-    })
-
-# Link credit-note rows to the invoice row they reverse (partial refund net-off).
-for refund in Tx.search([
+    # People no longer credited on these lines (project changed, old 100% row).
+    Tx.search([
         ('x_source_type', '=', 'invoice'),
-        ('x_transaction_type', '=', 'refund'),
-        ('x_source_period_id', '=', period.id),
-        ('x_reversal_of_id', '=', False)]):
-    src = refund.x_move_id.reversed_entry_id
-    if not src:
-        continue
-    inv = Tx.search([
-        ('x_move_id', '=', src.id),
-        ('x_employee_id', '=', refund.x_employee_id.id),
-        ('x_transaction_type', '=', 'invoice'),
-        ('x_is_downpayment', '=', False)], limit=1)
-    if inv:
-        refund.write({'x_reversal_of_id': inv.id})
+        ('x_move_line_id', 'in', lines.ids),
+        ('x_state', 'not in', ('paid_out', 'reversed')),
+        ('id', 'not in', kept_ids),
+    ]).unlink()
 
-# ---------------------------------------------------------------------
-# 2. POS transactions (non-invoiced orders; paid at the till)
-# ---------------------------------------------------------------------
-orders = env['pos.order'].search([
-    ('state', 'in', ('paid', 'done', 'invoiced')),
-    ('date_order', '>=', period.x_date_start),
-    ('date_order', '<', period.x_date_end + ONE_DAY),
-    ('account_move', '=', False),
-    ('company_id', '=', company.id),
-])
-pos_existing = {}
-for t in Tx.search([('x_pos_order_id', 'in', orders.ids)]):
-    pos_existing[(t.x_pos_order_line_id.id, t.x_employee_id.id)] = t
-pos_kept = []
-for order in orders:
-    emp = order.employee_id
-    if not emp or not emp.x_incentive_branch_id:
-        continue
-    order_date = order.date_order.date() if order.date_order else period.x_date_start
-    for pl in order.lines:
-        if not pl.product_id:
+    # Payment stamps: this period's rows + every older row still waiting.
+    pending = Tx.search([
+        ('x_source_type', '=', 'invoice'),
+        ('x_company_id', '=', company.id),
+        ('x_source_period_id.x_date_start', '<=', period.x_date_start),
+        ('x_state', '!=', 'paid_out'),
+    ])
+    paid_cache = {}
+    for t in pending:
+        move = t.x_move_id
+        if not move:
             continue
-        # A return line has a negative qty but its subtotal is not reliably
-        # negative (Odoo 19 stores +740,000 for qty -5): sign from the qty.
-        is_return = pl.qty < 0
-        vals = {
-            'x_name': '%s / %s' % (order.pos_reference or order.name,
-                                   pl.product_id.display_name),
-            'x_source_type': 'pos',
-            'x_pos_order_line_id': pl.id,
-            'x_pos_order_id': order.id,
-            'x_employee_id': emp.id,
-            'x_company_id': company.id,
-            'x_partner_id': order.partner_id.id,
-            'x_product_id': pl.product_id.id,
-            'x_invoice_date': order_date,
-            'x_source_period_id': period.id,
-            'x_transaction_type': 'refund' if is_return else 'invoice',
-            'x_base_amount': -abs(pl.price_subtotal) if is_return else pl.price_subtotal,
-            'x_split_share': 1.0,
-            'x_split_role': 'salesperson',
-            'x_discount': pl.discount,
-            'x_is_downpayment': False,
-            'x_is_discount_eligible': pl.discount <= max_discount,
-            'x_eligibility_note': (
-                'Line discount %.2f%% exceeds the %.2f%% cap.' % (pl.discount, max_discount)
-                if pl.discount > max_discount else False),
+        if move.id not in paid_cache:
+            paid_cache[move.id] = full_paid_date(move)
+        paid_on = paid_cache[move.id]
+        if not paid_on:
+            t.write({'x_is_payment_eligible': False, 'x_payment_date': False,
+                     'x_payment_period_id': False, 'x_is_prior_period': False})
+            continue
+        pay_period = period_for_date(paid_on)
+        t.write({
             'x_is_payment_eligible': True,
-            'x_payment_date': order_date,
-            'x_payment_period_id': period.id,
-            'x_payout_period_id': period.id,
-            'x_is_prior_period': False,
-            'x_state': 'confirmed',
-        }
-        ex = pos_existing.get((pl.id, emp.id))
-        if ex:
-            if ex.x_state == 'paid_out':
+            'x_payment_date': paid_on,
+            'x_payment_period_id': pay_period.id or False,
+            'x_payout_period_id': pay_period.id or False,
+            'x_is_prior_period': bool(
+                pay_period and t.x_source_period_id
+                and pay_period.x_date_start > t.x_source_period_id.x_date_start),
+        })
+
+    # Link credit-note rows to the invoice row they reverse (partial refund net-off).
+    for refund in Tx.search([
+            ('x_source_type', '=', 'invoice'),
+            ('x_transaction_type', '=', 'refund'),
+            ('x_source_period_id', '=', period.id),
+            ('x_reversal_of_id', '=', False)]):
+        src = refund.x_move_id.reversed_entry_id
+        if not src:
+            continue
+        inv = Tx.search([
+            ('x_move_id', '=', src.id),
+            ('x_employee_id', '=', refund.x_employee_id.id),
+            ('x_transaction_type', '=', 'invoice'),
+            ('x_is_downpayment', '=', False)], limit=1)
+        if inv:
+            refund.write({'x_reversal_of_id': inv.id})
+
+    # ---------------------------------------------------------------------
+    # 2. POS transactions (non-invoiced orders; paid at the till)
+    # ---------------------------------------------------------------------
+    orders = env['pos.order'].search([
+        ('state', 'in', ('paid', 'done', 'invoiced')),
+        ('date_order', '>=', period.x_date_start),
+        ('date_order', '<', period.x_date_end + ONE_DAY),
+        ('account_move', '=', False),
+        ('company_id', '=', company.id),
+    ])
+    pos_existing = {}
+    for t in Tx.search([('x_pos_order_id', 'in', orders.ids)]):
+        pos_existing[(t.x_pos_order_line_id.id, t.x_employee_id.id)] = t
+    pos_kept = []
+    for order in orders:
+        emp = order.employee_id
+        if not emp or not emp.x_incentive_branch_id:
+            continue
+        order_date = order.date_order.date() if order.date_order else period.x_date_start
+        for pl in order.lines:
+            if not pl.product_id:
                 continue
-            ex.write(vals)
-            pos_kept.append(ex.id)
-        else:
-            pos_kept.append(Tx.create(vals).id)
+            # A return line has a negative qty but its subtotal is not reliably
+            # negative (Odoo 19 stores +740,000 for qty -5): sign from the qty.
+            is_return = pl.qty < 0
+            vals = {
+                'x_name': '%s / %s' % (order.pos_reference or order.name,
+                                       pl.product_id.display_name),
+                'x_source_type': 'pos',
+                'x_pos_order_line_id': pl.id,
+                'x_pos_order_id': order.id,
+                'x_employee_id': emp.id,
+                'x_company_id': company.id,
+                'x_partner_id': order.partner_id.id,
+                'x_product_id': pl.product_id.id,
+                'x_invoice_date': order_date,
+                'x_source_period_id': period.id,
+                'x_transaction_type': 'refund' if is_return else 'invoice',
+                'x_base_amount': -abs(pl.price_subtotal) if is_return else pl.price_subtotal,
+                'x_split_share': 1.0,
+                'x_split_role': 'salesperson',
+                'x_discount': pl.discount,
+                'x_is_downpayment': False,
+                'x_is_discount_eligible': pl.discount <= max_discount,
+                'x_eligibility_note': (
+                    'Line discount %.2f%% exceeds the %.2f%% cap.' % (pl.discount, max_discount)
+                    if pl.discount > max_discount else False),
+                'x_is_payment_eligible': True,
+                'x_payment_date': order_date,
+                'x_payment_period_id': period.id,
+                'x_payout_period_id': period.id,
+                'x_is_prior_period': False,
+                'x_state': 'confirmed',
+            }
+            ex = pos_existing.get((pl.id, emp.id))
+            if ex:
+                if ex.x_state == 'paid_out':
+                    continue
+                ex.write(vals)
+                pos_kept.append(ex.id)
+            else:
+                pos_kept.append(Tx.create(vals).id)
 
-# Rows this run no longer produces (cashier changed, order invoiced since).
-Tx.search([
-    ('x_source_type', '=', 'pos'),
-    ('x_source_period_id', '=', period.id),
-    ('x_state', '!=', 'paid_out'),
-    ('id', 'not in', pos_kept),
-]).unlink()
+    # Rows this run no longer produces (cashier changed, order invoiced since).
+    Tx.search([
+        ('x_source_type', '=', 'pos'),
+        ('x_source_period_id', '=', period.id),
+        ('x_state', '!=', 'paid_out'),
+        ('id', 'not in', pos_kept),
+    ]).unlink()
 
-# Link each POS return to the sale it takes back -> that sale pays out only
-# on what the customer kept. Done after the loop: orders come newest first,
-# so a return is usually generated before its sale.
-for refund in Tx.browse(pos_kept).filtered(
-        lambda t: t.x_transaction_type == 'refund'
-        and t.x_pos_order_line_id.refunded_orderline_id):
-    originals = Tx.search([
-        ('x_pos_order_line_id', '=', refund.x_pos_order_line_id.refunded_orderline_id.id),
-        ('x_transaction_type', '=', 'invoice')])
-    same_emp = originals.filtered(lambda t: t.x_employee_id == refund.x_employee_id)
-    refund.write({'x_reversal_of_id': (same_emp or originals)[:1].id or False})
+    # Link each POS return to the sale it takes back -> that sale pays out only
+    # on what the customer kept. Done after the loop: orders come newest first,
+    # so a return is usually generated before its sale.
+    for refund in Tx.browse(pos_kept).filtered(
+            lambda t: t.x_transaction_type == 'refund'
+            and t.x_pos_order_line_id.refunded_orderline_id):
+        originals = Tx.search([
+            ('x_pos_order_line_id', '=', refund.x_pos_order_line_id.refunded_orderline_id.id),
+            ('x_transaction_type', '=', 'invoice')])
+        same_emp = originals.filtered(lambda t: t.x_employee_id == refund.x_employee_id)
+        refund.write({'x_reversal_of_id': (same_emp or originals)[:1].id or False})
 
-# ---------------------------------------------------------------------
-# 3. Refuse when credited people would silently earn nothing
-# ---------------------------------------------------------------------
-chk_domain = [('x_source_period_id', '=', period.id), ('x_state', '!=', 'reversed')]
-if only_bt:
-    chk_domain += ['|', '&',
-                   ('x_branch_id', '=', only_bt.x_branch_id.id),
-                   ('x_business_type', '=', only_bt.x_business_type),
-                   ('x_branch_id', '=', False)]
-credited = Tx.search(chk_domain).mapped('x_employee_id')
-if not only_bt:
-    # Only the teams with a Branch Target this period are calculated, so only
-    # they (and the branchless) are reported.
-    scopes = set()
-    for bt in period.x_branch_target_ids:
-        scopes.add((bt.x_branch_id.id, bt.x_business_type))
+    # ---------------------------------------------------------------------
+    # 3. Refuse when credited people would silently earn nothing
+    # ---------------------------------------------------------------------
+    chk_domain = [('x_source_period_id', '=', period.id), ('x_state', '!=', 'reversed')]
+    if only_bt:
+        chk_domain += ['|', '&',
+                       ('x_branch_id', '=', only_bt.x_branch_id.id),
+                       ('x_business_type', '=', only_bt.x_business_type),
+                       ('x_branch_id', '=', False)]
+    credited = Tx.search(chk_domain).mapped('x_employee_id')
+    if not only_bt:
+        # Only the teams with a Branch Target this period are calculated, so only
+        # they (and the branchless) are reported.
+        scopes = set()
+        for bt in period.x_branch_target_ids:
+            scopes.add((bt.x_branch_id.id, bt.x_business_type))
+        credited = credited.filtered(
+            lambda e: not (e.x_incentive_branch_id and e.x_incentive_business_type)
+            or (e.x_incentive_branch_id.id, e.x_incentive_business_type) in scopes)
+    # Nobody earns in a month they did not work: sales credited to someone who
+    # joins after (or left before) this period are simply not paid -- no error.
     credited = credited.filtered(
-        lambda e: not (e.x_incentive_branch_id and e.x_incentive_business_type)
-        or (e.x_incentive_branch_id.id, e.x_incentive_business_type) in scopes)
-# Nobody earns in a month they did not work: sales credited to someone who
-# joins after (or left before) this period are simply not paid -- no error.
-credited = credited.filtered(
-    lambda e: not (e.x_incentive_date_start and e.x_incentive_date_start > period.x_date_end)
-    and not (e.x_incentive_date_end and e.x_incentive_date_end < period.x_date_start))
-with_target = Target.search([
-    ('x_period_id', '=', period.id),
-    ('x_employee_id', 'in', credited.ids)]).mapped('x_employee_id')
-no_branch = credited.filtered(
-    lambda e: not (e.x_incentive_branch_id and e.x_incentive_business_type))
-no_target = credited - with_target - no_branch
-if no_branch or no_target:
-    msg = []
-    if no_branch:
-        msg.append('- No Sales Branch / Business Type: %s'
-                   % ', '.join(no_branch.mapped('name')))
-    if no_target:
-        msg.append('- No target in %s: %s'
-                   % (period.x_name, ', '.join(no_target.mapped('name'))))
-    raise UserError(
-        'These people have sales in %s but would get no payout:\n\n%s\n\n'
-        'Fill in their employee incentive settings and run the target '
-        'cascade, then calculate again.' % (period.x_name, '\n'.join(msg)))
+        lambda e: not (e.x_incentive_date_start and e.x_incentive_date_start > period.x_date_end)
+        and not (e.x_incentive_date_end and e.x_incentive_date_end < period.x_date_start))
+    with_target = Target.search([
+        ('x_period_id', '=', period.id),
+        ('x_employee_id', 'in', credited.ids)]).mapped('x_employee_id')
+    no_branch = credited.filtered(
+        lambda e: not (e.x_incentive_branch_id and e.x_incentive_business_type))
+    no_target = credited - with_target - no_branch
+    if no_branch or no_target:
+        msg = []
+        if no_branch:
+            msg.append('- No Sales Branch / Business Type: %s'
+                       % ', '.join(no_branch.mapped('name')))
+        if no_target:
+            msg.append('- No target in %s: %s'
+                       % (period.x_name, ', '.join(no_target.mapped('name'))))
+        raise UserError(
+            'These people have sales in %s but would get no payout:\n\n%s\n\n'
+            'Fill in their employee incentive settings and run the target '
+            'cascade, then calculate again.' % (period.x_name, '\n'.join(msg)))
 
 # ---------------------------------------------------------------------
 # 4. Individual payout (SQ1 tier -> SQ2 eligible -> SQ3 paid)
@@ -550,13 +567,17 @@ if only_bt:
     tgt_domain += [('x_branch_id', '=', only_bt.x_branch_id.id),
                    ('x_business_type', '=', only_bt.x_business_type)]
 touched = Payout
-for emp in Target.search(tgt_domain).mapped('x_employee_id'):
+if only_payout:
+    run_emps = only_payout.x_employee_id
+else:
+    run_emps = Target.search(tgt_domain).mapped('x_employee_id')
+for emp in run_emps:
     bt = only_bt or bt_for_employee(emp)
     # A team is in the period only through its Branch Target: a B2C target
     # left in a B2B-only month is not paid.
-    if not bt:
+    if not bt and not only_payout:
         continue
-    if is_closed(bt) and not only_bt:
+    if bt and is_closed(bt) and not only_bt:
         continue
     payout = get_payout(emp)
     touched |= payout
@@ -691,77 +712,78 @@ for emp in Target.search(tgt_domain).mapped('x_employee_id'):
 # ---------------------------------------------------------------------
 # 5. Branch payout: pool = team's payout_current, split by branch FTE,
 #    x branch tier rate. Global members (e.g. Pak Kenny) join every branch.
-# ---------------------------------------------------------------------
-global_members = Employee.search([
-    ('x_is_global_branch_member', '=', True),
-    ('x_incentive_designation_id', '!=', False)])
-global_accum = {}
-for bt in (only_bt or period.x_branch_target_ids):
-    if is_closed(bt) and not only_bt:
-        continue
-    branch = bt.x_branch_id
-    team = Employee.search([
-        ('x_incentive_branch_id', '=', branch.id),
-        ('x_incentive_business_type', '=', bt.x_business_type)]).filtered(
-        lambda e: e.x_branch_incentive_eligible and is_active_on(e, period.x_date_start))
-    btx = Tx.search([
-        ('x_branch_id', '=', branch.id),
-        ('x_business_type', '=', bt.x_business_type),
-        ('x_source_period_id', '=', period.id),
-        ('x_state', '!=', 'reversed')])
-    b_gross = sum(btx.filtered(
-        lambda t: t.x_transaction_type == 'invoice').mapped('x_base_amount'))
-    b_returns = abs(sum(btx.filtered(
-        lambda t: t.x_transaction_type == 'refund').mapped('x_base_amount')))
-    b_net = b_gross - b_returns
-    b_ach = (b_net / bt.x_amount_total) if bt.x_amount_total else 0.0
-    b_tier = get_tier(rule, b_ach, False)
-    b_rate = tier_rate(b_tier)
+if not only_payout:
+    # ---------------------------------------------------------------------
+    global_members = Employee.search([
+        ('x_is_global_branch_member', '=', True),
+        ('x_incentive_designation_id', '!=', False)])
+    global_accum = {}
+    for bt in (only_bt or period.x_branch_target_ids):
+        if is_closed(bt) and not only_bt:
+            continue
+        branch = bt.x_branch_id
+        team = Employee.search([
+            ('x_incentive_branch_id', '=', branch.id),
+            ('x_incentive_business_type', '=', bt.x_business_type)]).filtered(
+            lambda e: e.x_branch_incentive_eligible and is_active_on(e, period.x_date_start))
+        btx = Tx.search([
+            ('x_branch_id', '=', branch.id),
+            ('x_business_type', '=', bt.x_business_type),
+            ('x_source_period_id', '=', period.id),
+            ('x_state', '!=', 'reversed')])
+        b_gross = sum(btx.filtered(
+            lambda t: t.x_transaction_type == 'invoice').mapped('x_base_amount'))
+        b_returns = abs(sum(btx.filtered(
+            lambda t: t.x_transaction_type == 'refund').mapped('x_base_amount')))
+        b_net = b_gross - b_returns
+        b_ach = (b_net / bt.x_amount_total) if bt.x_amount_total else 0.0
+        b_tier = get_tier(rule, b_ach, False)
+        b_rate = tier_rate(b_tier)
 
-    team_data = []
-    for e in team:
-        p = get_payout(e)
-        touched |= p
-        if p.x_is_frozen:
+        team_data = []
+        for e in team:
+            p = get_payout(e)
+            touched |= p
+            if p.x_is_frozen:
+                continue
+            team_data.append((p, e, e.x_incentive_designation_id.x_fte_branch, False))
+        for e in global_members:
+            if e in team or not e.x_incentive_designation_id.x_fte_branch:
+                continue
+            p = get_payout(e)
+            touched |= p
+            if p.x_is_frozen:
+                continue
+            team_data.append((p, e, e.x_incentive_designation_id.x_fte_branch, True))
+            if e.id not in global_accum:
+                global_accum[e.id] = [p, 0.0]
+        if not team_data:
             continue
-        team_data.append((p, e, e.x_incentive_designation_id.x_fte_branch, False))
-    for e in global_members:
-        if e in team or not e.x_incentive_designation_id.x_fte_branch:
-            continue
-        p = get_payout(e)
-        touched |= p
-        if p.x_is_frozen:
-            continue
-        team_data.append((p, e, e.x_incentive_designation_id.x_fte_branch, True))
-        if e.id not in global_accum:
-            global_accum[e.id] = [p, 0.0]
-    if not team_data:
-        continue
 
-    pool = sum([d[0].x_payout_current for d in team_data])
-    total_fte = sum([d[2] for d in team_data])
-    for d in team_data:
-        share = (d[2] / total_fte) if total_fte else 0.0
-        bp = pool * share * b_rate
-        if d[3]:
-            global_accum[d[1].id][1] += bp
-        else:
-            d[0].write({
-                'x_branch_target': bt.x_amount_total,
-                'x_branch_net_sales': b_net,
-                'x_branch_achievement_pct': b_ach,
-                'x_branch_tier_id': b_tier.id or False,
-                'x_branch_tier_level': b_tier.x_level if b_tier else 0,
-                'x_branch_payout_rate': b_rate,
-                'x_branch_eligible': pool,
-                'x_branch_paid': pool * share,
-                'x_branch_pool': pool,
-                'x_branch_fte': d[2],
-                'x_branch_fte_share': share,
-                'x_branch_payout': bp,
-            })
-for key in global_accum:
-    global_accum[key][0].write({'x_branch_payout': global_accum[key][1]})
+        pool = sum([d[0].x_payout_current for d in team_data])
+        total_fte = sum([d[2] for d in team_data])
+        for d in team_data:
+            share = (d[2] / total_fte) if total_fte else 0.0
+            bp = pool * share * b_rate
+            if d[3]:
+                global_accum[d[1].id][1] += bp
+            else:
+                d[0].write({
+                    'x_branch_target': bt.x_amount_total,
+                    'x_branch_net_sales': b_net,
+                    'x_branch_achievement_pct': b_ach,
+                    'x_branch_tier_id': b_tier.id or False,
+                    'x_branch_tier_level': b_tier.x_level if b_tier else 0,
+                    'x_branch_payout_rate': b_rate,
+                    'x_branch_eligible': pool,
+                    'x_branch_paid': pool * share,
+                    'x_branch_pool': pool,
+                    'x_branch_fte': d[2],
+                    'x_branch_fte_share': share,
+                    'x_branch_payout': bp,
+                })
+    for key in global_accum:
+        global_accum[key][0].write({'x_branch_payout': global_accum[key][1]})
 
 # ---------------------------------------------------------------------
 # 6. Totals, then state
@@ -778,7 +800,9 @@ for p in touched:
         'x_is_eligible': bool(p.x_tier_level > 0 or p.x_branch_tier_level > 0),
     })
 
-if only_bt:
+if only_payout:
+    pass    # a recompute leaves the period / branch state alone
+elif only_bt:
     only_bt.write({'x_state': 'calculated'})
 else:
     period.write({'x_state': 'calculated'})

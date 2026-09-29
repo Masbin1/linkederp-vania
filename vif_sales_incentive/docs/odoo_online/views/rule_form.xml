@@ -1,31 +1,45 @@
-<form string="Incentive Rule">
+<form>
     <sheet>
-        <div class="oe_title"><h1><field name="x_name"/></h1></div>
+        <div class="oe_title">
+            <h1><field name="x_name" placeholder="Incentive Scheme 2H 2025"/></h1>
+        </div>
         <group>
-            <group>
+            <group string="Validity">
                 <field name="x_date_from"/>
                 <field name="x_date_to"/>
-                <field name="x_company_id"/>
-                <field name="x_active"/>
+                <field name="x_active" widget="boolean_toggle"/>
+                <field name="x_company_id" groups="base.group_multi_company"/>
             </group>
-            <group>
-                <field name="x_base_rate"/>
-                <field name="x_bonus_rate"/>
+            <group string="Rates">
+                <field name="x_base_rate" widget="percentage"/>
+                <field name="x_bonus_rate" widget="percentage"/>
                 <field name="x_max_discount"/>
-                <field name="x_cap_tier_in_mixed"/>
-                <field name="x_mixed_cap_tier_level"/>
             </group>
         </group>
-        <field name="x_tier_ids">
-            <list editable="bottom">
-                <field name="x_level"/>
-                <field name="x_name"/>
-                <field name="x_achievement_min"/>
-                <field name="x_achievement_max"/>
-                <field name="x_is_top_tier"/>
-                <field name="x_allocation"/>
-                <field name="x_payout_rate"/>
-            </list>
-        </field>
+        <group string="Mixed Scenario (S18)">
+            <field name="x_cap_tier_in_mixed"/>
+            <field name="x_mixed_cap_tier_level"
+                   invisible="not x_cap_tier_in_mixed"/>
+        </group>
+        <notebook>
+            <page string="Tiers">
+                <field name="x_tier_ids">
+                    <list editable="bottom">
+                        <field name="x_level"/>
+                        <field name="x_name"/>
+                        <field name="x_achievement_min" widget="percentage"/>
+                        <field name="x_achievement_max" widget="percentage"/>
+                        <field name="x_is_top_tier" widget="boolean_toggle"/>
+                        <field name="x_allocation" widget="percentage"/>
+                        <field name="x_payout_rate"/>
+                        <field name="x_note"/>
+                    </list>
+                </field>
+                <div class="text-muted mt-2">
+                    A tier matches when <b>min &lt;= achievement &lt; max</b>.
+                    Tick "Open-ended" on the highest tier.
+                </div>
+            </page>
+        </notebook>
     </sheet>
 </form>

@@ -1,23 +1,20 @@
 <form string="Refund Invoice">
-    <sheet>
+    <group>
         <group>
-            <field name="x_transaction_id" readonly="1"/>
-            <field name="x_move_id"/>
-            <field name="x_employee_id"/>
-            <field name="x_base_amount"/>
-            <field name="x_refundable_amount"/>
+            <field name="x_move_id" readonly="1"/>
+            <field name="x_employee_id" readonly="1"/>
+            <field name="x_move_line_id" readonly="1" options="{'no_create': True}"/>
+        </group>
+        <group>
+            <field name="x_base_amount" readonly="1"/>
+            <field name="x_refundable_amount" readonly="1"/>
             <field name="x_refund_amount"/>
-            <field name="x_refund_move_id" invisible="not x_refund_move_id"/>
             <field name="x_currency_id" invisible="1"/>
         </group>
-        <p class="text-muted">
-            The amount is for the WHOLE invoice line. On a project line every
-            person's share is reduced automatically at the next Calculate.
-        </p>
-    </sheet>
+    </group>
     <footer>
-        <button name="[ID VIF: Refund Confirm]" type="action" string="Create Credit Note"
-                class="btn-primary" invisible="x_refund_move_id"/>
-        <button string="Close" special="cancel"/>
+        <button name="[ID VIF: Refund Confirm]" type="action"
+                string="Create Credit Note &amp; Refund" class="btn-primary"/>
+        <button string="Cancel" class="btn-secondary" special="cancel"/>
     </footer>
 </form>

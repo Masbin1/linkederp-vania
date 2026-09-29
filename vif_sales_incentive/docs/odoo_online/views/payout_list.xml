@@ -1,18 +1,29 @@
-<list string="Incentive Payouts" create="0">
+<list sample="1" decoration-muted="not x_is_eligible"
+      decoration-success="x_tier_level >= 4">
     <field name="x_period_id"/>
     <field name="x_employee_id"/>
-    <field name="x_branch_id"/>
-    <field name="x_business_type"/>
-    <field name="x_target_incentive" optional="show"/>
-    <field name="x_net_sales"/>
+    <field name="x_branch_id" optional="show"/>
+    <field name="x_business_type" optional="show"/>
+    <field name="x_target_incentive" sum="Target"/>
+    <field name="x_target_bonus" sum="Bonus Target" optional="show"/>
+    <field name="x_net_sales" sum="Net Sales"/>
     <field name="x_achievement_pct" widget="percentage"/>
     <field name="x_tier_id"/>
-    <field name="x_payout_prior" sum="Total" optional="hide"/>
-    <field name="x_payout_current" sum="Total" optional="hide"/>
-    <field name="x_incentive_payout" sum="Total"/>
-    <field name="x_payout_bonus" sum="Total"/>
-    <field name="x_branch_payout" sum="Total"/>
-    <field name="x_total_payout" sum="Total"/>
-    <field name="x_is_frozen" optional="hide"/>
+    <field name="x_payout_rate" digits="[16,6]" optional="hide"/>
+    <field name="x_eligible_incentive" optional="show"/>
+    <field name="x_paid_prior_month" optional="show"/>
+    <field name="x_paid_current_month" optional="show"/>
+    <field name="x_payout_prior" sum="Prior" optional="hide"/>
+    <field name="x_payout_current" sum="Current" optional="hide"/>
+    <field name="x_incentive_payout" sum="Incentive"/>
+    <field name="x_payout_bonus" sum="Bonus"/>
+    <field name="x_branch_achievement_pct" widget="percentage" optional="show"/>
+    <field name="x_branch_tier_id" optional="show"/>
+    <field name="x_branch_paid" string="Branch Paid Base" optional="hide"/>
+    <field name="x_branch_payout" sum="Branch"/>
+    <field name="x_total_payout" sum="Total Payout"/>
+    <field name="x_is_eligible" widget="boolean_toggle"/>
+    <field name="x_is_frozen" optional="show" widget="boolean_toggle"/>
     <field name="x_currency_id" column_invisible="1"/>
+    <field name="x_tier_level" column_invisible="1"/>
 </list>

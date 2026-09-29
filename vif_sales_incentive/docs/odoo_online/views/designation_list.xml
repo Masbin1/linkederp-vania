@@ -1,10 +1,9 @@
-<list string="FTE Designations" editable="bottom">
+<list editable="bottom">
     <field name="x_sequence" widget="handle"/>
-    <field name="x_name"/>
     <field name="x_code"/>
+    <field name="x_name"/>
     <field name="x_fte_branch"/>
     <field name="x_fte_individual"/>
-    <field name="x_branch_eligible"/>
-    <field name="x_individual_eligible"/>
-    <field name="x_active"/>
+    <field name="x_branch_eligible" widget="boolean_toggle"/>
+    <field name="x_individual_eligible" widget="boolean_toggle"/>
 </list>
