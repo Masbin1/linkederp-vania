@@ -958,7 +958,286 @@ Setelah lock, angka dianggap final.
 
 ---
 
-## 32. Penutup
+## 32. Contoh Perhitungan Lengkap (B2B)
+
+Bagian ini menjelaskan alur perhitungan dari awal sampai akhir dengan satu contoh nyata. Datanya **sudah ada di database** sehingga setiap angka di bawah bisa dicek langsung di Odoo.
+
+### 32.1 Data Contoh di Database
+
+Semua data contoh diberi nama **Demo** / **[DEMO]** agar mudah dicari:
+
+| Data | Nama di Odoo |
+|---|---|
+| Cabang | **Demo B2B** (kode DEMO), Business Type **B2B** |
+| Rule | **Demo Scheme Q4 2026** (tier sama dengan skema 2H, lihat bagian 17) |
+| Periode | **Demo Okt 2026** dan **Demo Nov 2026** (status **Calculated**) |
+| Karyawan | **[DEMO] Andi**, **[DEMO] Bella**, **[DEMO] Candra**, **[DEMO] Dewi**, **[DEMO] Eko** |
+| Customer / Produk | **[DEMO] PT Contoh Pelanggan** / **[DEMO] Sofa Kantor** |
+| Project | **[DEMO] Proyek Interior Kantor** |
+
+Cara melihatnya:
+
+- **Sales Incentive → Incentive Periods** → buka **Demo Okt 2026**
+- **Sales Incentive → Payouts** → filter Period = Demo Okt 2026
+- **Sales Incentive → Transactions** → filter Period = Demo Okt 2026
+- Di setiap payout, tab **Computation Log** berisi jejak perhitungan orang tersebut
+
+Data ini dibuat dengan script `seed_incentive_demo_b2b_2026.py` (di folder repository).
+
+### 32.2 Tim Demo B2B
+
+| Karyawan | Role | FTE Branch | FTE Individual | Keterangan |
+|---|---|---:|---:|---|
+| [DEMO] Andi | Lead | 1,5 | 1,5 | |
+| [DEMO] Bella | Team | 1,0 | 1,0 | |
+| [DEMO] Candra | Team | 1,0 | 1,0 | |
+| [DEMO] Dewi | Team | 1,0 | 1,0 | **Karyawan baru**, Effective Target Start **16 Okt 2026** |
+| [DEMO] Eko | Support | 0,25 | 0 | Tidak punya target individual |
+| Kenny Nathaniel Wahyudi | Head | 2,0 | – | **Global Branch Member** (bagian 7) |
+
+Branch Target Oktober: **Demo B2B / B2B = 1.000.000.000**.
+
+### 32.3 Langkah 1 — Cascade Target
+
+Target cabang dibagi ke setiap kursi (seat) sesuai **FTE Individual**:
+
+```text
+Target dasar per orang = Target cabang × FTE orang ÷ Total FTE tim
+```
+
+Total FTE individual = 1,5 + 1 + 1 + 1 = **4,5**. Eko (Support) tidak dihitung karena FTE individualnya 0.
+
+Dewi baru masuk 16 Oktober. Dia aktif 16 dari 31 hari, jadi **prorata = 16/31 = 51,61%**.
+
+| Karyawan | Perhitungan | Target Incentive |
+|---|---|---:|
+| Andi | 1.000.000.000 × 1,5 ÷ 4,5 | 333.333.333,33 |
+| Bella | 1.000.000.000 × 1 ÷ 4,5 | 222.222.222,22 |
+| Candra | 1.000.000.000 × 1 ÷ 4,5 | 222.222.222,22 |
+| Dewi | 222.222.222,22 × 16/31 | 114.695.340,50 |
+
+Kursi Dewi kosong 15 hari (15/31). Karena **Redistribute Vacant Slots** dicentang, porsi kosong itu menjadi **target bonus**:
+
+```text
+Porsi kosong = 222.222.222,22 × 15/31 = 107.526.881,72
+```
+
+Porsi ini dibagikan ke orang yang bekerja **penuh sebulan**, sesuai FTE. Orangnya Andi 1,5, Bella 1, dan Candra 1, jadi totalnya 3,5:
+
+| Karyawan | Perhitungan | Target Bonus |
+|---|---|---:|
+| Andi | 107.526.881,72 × 1,5 ÷ 3,5 | 46.082.949,31 |
+| Bella | 107.526.881,72 × 1 ÷ 3,5 | 30.721.966,21 |
+| Candra | 107.526.881,72 × 1 ÷ 3,5 | 30.721.966,21 |
+
+Hasilnya bisa dicek di **Sales Incentive → Targets**. Source target incentive = *Rolling Forecast Cascade*, source target bonus = *Vacancy Redistribution*.
+
+> Orang yang punya **target bonus** masuk kategori **mixed**. Aturannya dibahas di Langkah 3 dan 4.
+
+### 32.4 Langkah 2 — Transaksi Bulan Oktober
+
+Semua invoice berikut sudah **Posted**:
+
+| Invoice | Tanggal | Credit ke | Nilai | Catatan | Lunas |
+|---|---|---|---:|---|---|
+| INV/2026/04594 | 5 Okt | Andi | 380.000.000 | | 15 Okt |
+| INV/2026/04595 | 8 Okt | Bella | 150.000.000 | | 20 Okt |
+| INV/2026/04596 | 25 Okt | Bella | 50.000.000 | | **Belum lunas di Oktober** (lunas 10 Nov) |
+| INV/2026/04597 baris 1 | 12 Okt | Candra | 170.000.000 | | 22 Okt |
+| INV/2026/04597 baris 2 | 12 Okt | Candra | 30.000.000 | 50.000.000 dengan **diskon 40%** | 22 Okt |
+| RINV/2026/00016 | 28 Okt | Candra | −10.000.000 | Credit note dari INV/2026/04597 | – |
+| INV/2026/04598 | 20 Okt | Dewi | 60.000.000 | | 27 Okt |
+| INV/2026/04599 | 18 Okt | Andi (PM 30%) | 30.000.000 | Invoice project 100.000.000 | 30 Okt |
+| INV/2026/04599 | 18 Okt | Dewi (Salesperson 2, 70%) | 70.000.000 | Invoice project 100.000.000 | 30 Okt |
+
+Catatan invoice project **[DEMO] Proyek Interior Kantor**: Sales Order-nya dibuat oleh **Bella**. Bella tidak tercantum di project, jadi dia **tidak mendapat bagian** (bagian 13.3). Kreditnya dibagi ke PM Andi 30% dan Salesperson 2 Dewi 70%.
+
+Di **Transactions**, invoice project muncul dua baris, satu untuk Andi dan satu untuk Dewi.
+
+### 32.5 Langkah 3 — Achievement dan Tier (per orang)
+
+Tier ditentukan dari **semua** penjualan bulan itu: lunas maupun belum, termasuk baris dengan diskon besar. Nilai retur mengurangi penjualan.
+
+```text
+Net Sales   = Penjualan (invoice) − Retur (credit note)
+Achievement = Net Sales ÷ Target Incentive
+```
+
+| Karyawan | Penjualan | Retur | Net Sales | Target Incentive | Achievement | Tier |
+|---|---:|---:|---:|---:|---:|---|
+| Andi | 410.000.000 | 0 | 410.000.000 | 333.333.333,33 | 123,00% | Tier 5 → **dibatasi Tier 4 (0,75%)** |
+| Bella | 200.000.000 | 0 | 200.000.000 | 222.222.222,22 | 90,00% | **Tier 3 (0,675%)** |
+| Candra | 200.000.000 | 10.000.000 | 190.000.000 | 222.222.222,22 | 85,50% | **Tier 2 (0,60%)** |
+| Dewi | 130.000.000 | 0 | 130.000.000 | 114.695.340,50 | 113,34% | **Tier 5 (0,7875%)** |
+
+Penjelasan:
+
+- **Andi** mencapai Tier 5, tetapi dia punya target bonus (mixed). Pada skema mixed, tier **dibatasi maksimal Tier 4**. Rate-nya menjadi 0,75%.
+- **Bella**: invoice 50 juta yang belum lunas **tetap dihitung** untuk tier. Tanpa invoice itu, achievement-nya hanya 67,5% (Tier 0).
+- **Candra**: baris diskon 40% tetap dihitung untuk tier. Credit note 10 juta mengurangi net sales.
+- **Dewi**: targetnya kecil karena prorata, dan dia tidak punya target bonus. Jadi dia mendapat Tier 5 penuh.
+
+Tier yang didapat **dibekukan** ke setiap transaksi bulan itu (kolom *Tier Payout Rate* di Transactions). Rate ini dipakai lagi kalau invoice-nya baru lunas di bulan berikutnya (Langkah 8).
+
+### 32.6 Langkah 4 — Dasar Payout yang Eligible
+
+Tidak semua penjualan boleh dibayarkan. Yang **tidak** masuk dasar payout:
+
+- Baris invoice dengan diskon **lebih dari 35%** (bagian 16)
+- Baris **Down Payment** (bagian 15)
+- Credit note (hanya mengurangi, lihat Langkah 5)
+
+| Karyawan | Eligible | Dikeluarkan (diskon > 35%) |
+|---|---:|---:|
+| Andi | 410.000.000 | 0 |
+| Bella | 200.000.000 | 0 |
+| Candra | 170.000.000 | 30.000.000 |
+| Dewi | 130.000.000 | 0 |
+
+Untuk orang **mixed** (punya target bonus), dasar eligible dibagi ke dua keranjang (bucket):
+
+```text
+Bucket Incentive = maksimal sebesar Target Incentive
+Bucket Bonus     = sisa di atas Target Incentive (tidak dibatasi)
+```
+
+Pengisian dilakukan **berurutan berdasarkan tanggal invoice**. Invoice yang lebih awal mengisi bucket incentive lebih dulu.
+
+**Andi** (target incentive 333.333.333,33):
+
+| Invoice | Nilai | Masuk Bucket Incentive | Masuk Bucket Bonus |
+|---|---:|---:|---:|
+| INV/2026/04594 (5 Okt) | 380.000.000 | 333.333.333,33 | 46.666.666,67 |
+| INV/2026/04599 (18 Okt, project) | 30.000.000 | 0 | 30.000.000 |
+| **Total** | 410.000.000 | **333.333.333,33** | **76.666.666,67** |
+
+Bella dan Candra juga mixed, tetapi eligible-nya di bawah target incentive, jadi bucket bonus mereka 0. Dewi tidak mixed, jadi semua eligible-nya masuk bucket incentive.
+
+### 32.7 Langkah 5 — Hanya yang Sudah Lunas yang Dibayar
+
+Dari dasar eligible, yang dibayar hanya invoice yang **lunas di bulan ini**. Jika ada credit note yang terhubung ke invoice asal, nilainya dikurangkan dulu.
+
+```text
+Incentive Payout (current) = Bucket incentive yang lunas × Rate tier
+Bonus Payout               = Bucket bonus yang lunas     × Bonus rate (1%)
+```
+
+| Karyawan | Bucket Incentive Lunas | × Rate | Payout Current | Bucket Bonus Lunas | × 1% | Bonus Payout |
+|---|---:|---:|---:|---:|---:|---:|
+| Andi | 333.333.333,33 | 0,75% | 2.500.000,00 | 76.666.666,67 | 1% | 766.666,67 |
+| Bella | 150.000.000 | 0,675% | 1.012.500,00 | 0 | | 0 |
+| Candra | 160.000.000 | 0,60% | 960.000,00 | 0 | | 0 |
+| Dewi | 130.000.000 | 0,7875% | 1.023.750,00 | 0 | | 0 |
+
+Penjelasan:
+
+- **Bella**: invoice 50 juta belum lunas, jadi yang dibayar baru 150 juta. Sisanya menunggu lunas (Langkah 8).
+- **Candra**: baris 170 juta dikurangi credit note 10 juta = **160 juta**. Baris diskon 40% tidak dibayar sama sekali.
+
+### 32.8 Langkah 6 — Branch Payout
+
+Branch payout menghitung pencapaian **cabang** secara keseluruhan.
+
+**a. Tier cabang**
+
+```text
+Net sales cabang = 410 + 200 + 190 + 130 juta = 930.000.000
+Achievement      = 930.000.000 ÷ 1.000.000.000 = 93%  →  Tier 3 (0,675%)
+```
+
+Batasan Tier 4 untuk mixed **tidak** berlaku di level cabang.
+
+**b. Siapa yang ikut**
+
+Yang ikut adalah anggota tim yang eligible branch dan **aktif pada tanggal 1** periode, ditambah Global Branch Member:
+
+| Orang | FTE Branch | Ikut? |
+|---|---:|---|
+| Andi | 1,5 | Ya |
+| Bella | 1,0 | Ya |
+| Candra | 1,0 | Ya |
+| Eko (Support) | 0,25 | Ya, walaupun tidak punya target |
+| Kenny (Global) | 2,0 | Ya |
+| Dewi | – | **Tidak**, karena baru mulai 16 Okt (belum aktif tanggal 1) |
+| **Total FTE** | **5,75** | |
+
+**c. Pool dan pembagian**
+
+```text
+Pool          = jumlah Payout Current anggota yang ikut
+              = 2.500.000 + 1.012.500 + 960.000 + 0 (Eko) + 0 (Kenny) = 4.472.500
+Branch Payout = Pool × (FTE orang ÷ Total FTE) × Rate tier cabang
+```
+
+Pool hanya dari **Payout Current**. Bonus Payout dan Payout Prior tidak ikut dihitung. Payout Dewi juga tidak masuk pool karena dia tidak ikut branch bulan ini.
+
+| Orang | Perhitungan | Branch Payout |
+|---|---|---:|
+| Andi | 4.472.500 × 1,5/5,75 × 0,675% | 7.875,49 |
+| Bella | 4.472.500 × 1/5,75 × 0,675% | 5.250,33 |
+| Candra | 4.472.500 × 1/5,75 × 0,675% | 5.250,33 |
+| Eko | 4.472.500 × 0,25/5,75 × 0,675% | 1.312,58 |
+| Kenny | 4.472.500 × 2/5,75 × 0,675% | 10.500,65 |
+
+### 32.9 Langkah 7 — Total Payout Oktober
+
+```text
+Total Payout = Payout Current + Payout Prior + Bonus Payout + Branch Payout
+```
+
+| Karyawan | Current | Prior | Bonus | Branch | **Total** |
+|---|---:|---:|---:|---:|---:|
+| Andi | 2.500.000,00 | 0 | 766.666,67 | 7.875,49 | **3.274.542,16** |
+| Bella | 1.012.500,00 | 0 | 0 | 5.250,33 | **1.017.750,33** |
+| Candra | 960.000,00 | 0 | 0 | 5.250,33 | **965.250,33** |
+| Dewi | 1.023.750,00 | 0 | 0 | 0 | **1.023.750,00** |
+| Eko | 0 | 0 | 0 | 1.312,58 | **1.312,58** |
+| Kenny | 0 | 0 | 0 | 10.500,65 | **10.500,65** |
+| **Total Oktober** | | | | | **6.293.106,05** |
+
+### 32.10 Langkah 8 — November: Invoice Oktober yang Baru Lunas
+
+Invoice Bella **INV/2026/04596** (50 juta, tanggal 25 Okt) baru lunas **10 November**.
+
+Di **Demo Nov 2026**:
+
+- Branch Target November 1.000.000.000 di-cascade ulang. Dewi sekarang aktif penuh, jadi semua mendapat target normal (Andi 333.333.333,33; lainnya 222.222.222,22) dan **tidak ada target bonus**.
+- Tidak ada penjualan baru di November, jadi tier November semuanya **Tier 0**.
+- Invoice Bella tetap dibayar dengan rate tier **bulan asal invoice** (Tier 3 Oktober = 0,675%), **bukan** tier November:
+
+```text
+Payout Prior Bella = 50.000.000 × 0,675% = 337.500
+```
+
+| Karyawan | Current | Prior | Bonus | Branch | **Total November** |
+|---|---:|---:|---:|---:|---:|
+| Bella | 0 | 337.500 | 0 | 0 | **337.500** |
+| Lainnya | 0 | 0 | 0 | 0 | 0 |
+
+Branch payout November = 0, karena net sales cabang November 0 (Tier 0). Payout Prior juga tidak ikut pool branch.
+
+### 32.11 Ringkasan Alur
+
+```text
+1. Cascade      Target cabang × FTE ÷ total FTE × prorata  → Target Incentive
+                Porsi kursi kosong → Target Bonus (untuk yang full sebulan)
+2. Transaksi    Invoice posted di bulan itu (split project, POS, retur)
+3. Tier (SQ1)   Net sales (semua invoice, lunas/belum) ÷ Target Incentive
+                Mixed → tier maksimal Tier 4
+4. Eligible     Buang diskon > 35% dan DP
+   (SQ2)        Isi bucket incentive (sampai target) lalu bucket bonus, urut tanggal
+5. Lunas (SQ3)  Current = bucket incentive lunas bulan ini × rate tier
+                Bonus   = bucket bonus lunas × 1%
+                Prior   = invoice bulan lalu yang lunas bulan ini × rate tier bulan asalnya
+6. Branch       Tier dari net sales cabang ÷ target cabang
+                Pool = total Payout Current tim yang aktif tanggal 1 (+ Global member)
+                Branch payout = Pool × FTE ÷ total FTE × rate tier cabang
+7. Total        Current + Prior + Bonus + Branch
+```
+
+---
+
+## 33. Penutup
 
 Modul **VIF Sales Incentive** membantu menghitung insentif dengan lebih rapi, transparan, dan dapat diaudit.
 
