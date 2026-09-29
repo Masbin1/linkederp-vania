@@ -132,6 +132,11 @@ class IncentivePeriod(models.Model):
                        ('branch_id', '=', False)]
         employees = self.env['incentive.transaction'].search(
             domain).mapped('employee_id')
+        # Nobody earns in a month they did not work: sales credited to someone
+        # who joins after (or left before) this period are simply not paid.
+        employees = employees.filtered(
+            lambda e: not (e.incentive_date_start and e.incentive_date_start > self.date_end)
+            and not (e.incentive_date_end and e.incentive_date_end < self.date_start))
         with_target = self.env['incentive.target'].search([
             ('period_id', '=', self.id),
             ('employee_id', 'in', employees.ids),

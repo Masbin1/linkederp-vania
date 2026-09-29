@@ -509,6 +509,20 @@ if only_bt:
                    ('x_business_type', '=', only_bt.x_business_type),
                    ('x_branch_id', '=', False)]
 credited = Tx.search(chk_domain).mapped('x_employee_id')
+if not only_bt:
+    # Only the teams with a Branch Target this period are calculated, so only
+    # they (and the branchless) are reported.
+    scopes = set()
+    for bt in period.x_branch_target_ids:
+        scopes.add((bt.x_branch_id.id, bt.x_business_type))
+    credited = credited.filtered(
+        lambda e: not (e.x_incentive_branch_id and e.x_incentive_business_type)
+        or (e.x_incentive_branch_id.id, e.x_incentive_business_type) in scopes)
+# Nobody earns in a month they did not work: sales credited to someone who
+# joins after (or left before) this period are simply not paid -- no error.
+credited = credited.filtered(
+    lambda e: not (e.x_incentive_date_start and e.x_incentive_date_start > period.x_date_end)
+    and not (e.x_incentive_date_end and e.x_incentive_date_end < period.x_date_start))
 with_target = Target.search([
     ('x_period_id', '=', period.id),
     ('x_employee_id', 'in', credited.ids)]).mapped('x_employee_id')
@@ -538,7 +552,11 @@ if only_bt:
 touched = Payout
 for emp in Target.search(tgt_domain).mapped('x_employee_id'):
     bt = only_bt or bt_for_employee(emp)
-    if bt and is_closed(bt) and not only_bt:
+    # A team is in the period only through its Branch Target: a B2C target
+    # left in a B2B-only month is not paid.
+    if not bt:
+        continue
+    if is_closed(bt) and not only_bt:
         continue
     payout = get_payout(emp)
     touched |= payout
