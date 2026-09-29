@@ -356,14 +356,26 @@ Jika salesperson tersebut memang ikut menangani project, tambahkan dia di projec
 
 PM selalu mendapat bagiannya sendiri, walaupun PM belum punya branch atau target. Tetapi PM seperti itu tidak akan menghasilkan payout, dan **Calculate** akan menolak sampai data PM dilengkapi (lihat bagian 18).
 
-### 13.5 Invoice Tanpa Project
+### 13.5 Invoice Tanpa Project / Project Tanpa PM
 
 Jika Sales Order tidak punya project (atau invoice dibuat manual, atau invoice dari POS), sistem memakai cara lama:
 
 - **Incentive Salesperson** di invoice mendapat **100%**
 - Untuk invoice dari POS, Incentive Salesperson adalah kasirnya (lihat bagian 14)
 
-Catatan: field **Incentive Salesperson** di invoice hanya berpengaruh untuk invoice **tanpa project**. Untuk invoice dengan project, pembagian selalu mengikuti data project.
+Cara yang sama juga dipakai jika project **ada**, tetapi tidak ada satu pun orang di project yang bisa menerima kredit. Jika PM kosong, kredit tidak punya tempat untuk dialihkan, sehingga kembali ke Incentive Salesperson di invoice:
+
+| Kondisi Project | Kredit Masuk ke |
+|---|---|
+| PM, Salesperson 2, Salesperson 3 **semua kosong** | **Incentive Salesperson** invoice 100% |
+| PM kosong, Salesperson 2/3 kosong, tetapi persen komisi diisi | **Incentive Salesperson** invoice 100% |
+| PM kosong, Salesperson 2 terisi tetapi belum punya **Sales Branch / Business Type** atau **target** | **Incentive Salesperson** invoice 100% |
+| PM kosong, Salesperson 2 terisi dan sudah lengkap datanya | **Salesperson 2 100%**. Sisa persen yang biasanya dialihkan ke PM dibagi ulang ke orang yang ada |
+| PM terisi, Salesperson 2/3 kosong | **PM 100%**. Salesperson di Sales Order tidak mendapat apa-apa (bagian 13.3) |
+
+Incentive Salesperson di invoice otomatis diisi dari **Salesperson** invoice. Untuk invoice yang dibuat dari Sales Order, orangnya sama dengan salesperson di Sales Order. Jika Salesperson atau Incentive Salesperson di invoice diubah manual, yang mendapat kredit adalah orang yang tertulis di invoice.
+
+Catatan: field **Incentive Salesperson** di invoice hanya berpengaruh untuk invoice **tanpa project**, atau project yang tidak punya orang penerima kredit seperti tabel di atas. Selain itu, pembagian selalu mengikuti data project.
 
 ### 13.6 Jika Data Project Diubah
 
@@ -1237,7 +1249,513 @@ Branch payout November = 0, karena net sales cabang November 0 (Tier 0). Payout 
 
 ---
 
-## 33. Penutup
+## 33. Rumus Setiap Angka dan Contohnya
+
+Bagian ini adalah **kamus rumus**. Setiap angka yang muncul di layar **Targets**, **Payouts**, dan **Transactions** dijelaskan dari mana asalnya, lengkap dengan contoh angka.
+
+Semua contoh memakai data **Demo Okt 2026** dan **Demo Nov 2026** dari bagian 32, jadi bisa langsung dicocokkan di Odoo. Contoh yang bukan dari data demo diberi tanda *(contoh ilustrasi)*.
+
+Gunakan bagian ini jika ada pertanyaan **"kenapa hasil saya seperti ini?"**.
+
+### 33.1 Angka di Menu Targets
+
+| Kolom | Rumus | Contoh |
+|---|---|---|
+| **Amount** (Target Type = Incentive) | Target cabang × FTE orang ÷ total FTE tim × Proration + Carry-Forward | Dewi: 1.000.000.000 × 1 ÷ 4,5 × 16/31 = **114.695.340,50** |
+| **Amount** (Target Type = Bonus) | Porsi kursi kosong × FTE orang ÷ total FTE orang yang bekerja penuh sebulan | Andi: 107.526.881,72 × 1,5 ÷ 3,5 = **46.082.949,31** |
+| **FTE Used** | FTE Individual dari role (FTE Designation) | Andi (Lead) = **1,5** |
+| **Proration** | Hari aktif ÷ jumlah hari di bulan itu | Dewi masuk 16 Okt: 16 ÷ 31 = **0,5161** |
+| **Source** | Asal target | *Rolling Forecast Cascade* = hasil cascade; *Vacancy Redistribution* = target bonus dari kursi kosong |
+| **Shortfall** | Target Incentive − Net Sales (jika hasilnya positif). Diisi saat periode di-**Lock** | lihat contoh di bawah |
+| **Months Remaining** | Jumlah bulan setelah periode ini sampai akhir Rule | lihat contoh di bawah |
+| **Carry-Forward / Month** | Shortfall ÷ Months Remaining | lihat contoh di bawah |
+
+**Contoh Carry-Forward** *(contoh ilustrasi: data demo belum di-Lock)*
+
+Misalkan **Demo Okt 2026** di-Lock. Rule *Demo Scheme Q4 2026* berlaku sampai Desember 2026.
+
+```text
+Bella: Target Incentive Okt = 222.222.222,22, Net Sales Okt = 200.000.000
+Shortfall             = 222.222.222,22 − 200.000.000 = 22.222.222,22
+Months Remaining      = November, Desember           = 2
+Carry-Forward / Month = 22.222.222,22 ÷ 2            = 11.111.111,11
+```
+
+Saat cascade November dijalankan setelah Oktober di-Lock:
+
+```text
+Target Incentive Bella Nov = 222.222.222,22 (dasar) + 11.111.111,11 (carry-forward) = 233.333.333,33
+```
+
+Desember juga mendapat tambahan 11.111.111,11 yang sama.
+
+Aturan carry-forward:
+
+- Hanya dari periode yang sudah **Locked** dan memakai **Rule yang sama**
+- Hanya **target incentive**. Target bonus tidak dibawa ke bulan berikutnya
+- Yang dibawa hanya **target**. Payout tidak dibawa
+- Di Branch Target, kolom **Carry-Forward** = total carry-forward seluruh tim cabang itu
+
+### 33.2 Angka di Payout — Bagian Individual
+
+Contoh memakai **Andi** dan **Candra** di Demo Okt 2026.
+
+| Kolom | Rumus | Andi | Candra |
+|---|---|---:|---:|
+| **Target Incentive** | Target incentive orang itu di periode ini | 333.333.333,33 | 222.222.222,22 |
+| **Target Bonus** | Target bonus orang itu | 46.082.949,31 | 30.721.966,21 |
+| **Target Total** | Target Incentive + Target Bonus | 379.416.282,64 | 252.944.188,43 |
+| **Mixed Scenario** | Dicentang jika punya Target Bonus | ✓ | ✓ |
+| **Gross Sales** | Jumlah semua baris invoice bulan ini: lunas/belum, termasuk DP dan diskon besar | 410.000.000 | 200.000.000 |
+| **Sales Return** | Jumlah credit note / retur bulan ini | 0 | 10.000.000 |
+| **Net Sales** | Gross Sales − Sales Return | 410.000.000 | 190.000.000 |
+| **Achievement** | Net Sales ÷ Target Incentive | 123,00% | 85,50% |
+| **Tier** | Tier yang cocok dengan Achievement (bagian 17). Jika Mixed, maksimal Tier 4 | Tier 4 (seharusnya Tier 5, dibatasi) | Tier 2 |
+| **Payout Rate** | Allocation tier × Base Rate (0,75%) | 1,0 × 0,75% = 0,75% | 0,8 × 0,75% = 0,60% |
+| **Eligible Achievement Incentive** | Dasar eligible (tanpa diskon > 35% dan tanpa DP), maksimal sebesar Target Incentive | 333.333.333,33 | 170.000.000 |
+| **Eligible Achievement Bonus** | Sisa dasar eligible di atas Target Incentive (hanya jika Mixed) | 76.666.666,67 | 0 |
+| **Excluded (Discount > cap)** | Baris invoice dengan diskon lebih dari 35% | 0 | 30.000.000 |
+| **Paid Current Month** | Bagian incentive dari invoice bulan ini yang **lunas bulan ini**, dikurangi credit note yang terhubung | 333.333.333,33 | 160.000.000 |
+| **Paid Prior Month** | Bagian incentive dari invoice **bulan sebelumnya** yang baru lunas bulan ini | 0 | 0 |
+| **Paid Bonus** | Bagian bonus yang lunas bulan ini | 76.666.666,67 | 0 |
+| **Incentive Payout Current Month** | Paid Current Month × Payout Rate | 2.500.000,00 | 960.000,00 |
+| **Incentive Payout Previous Month** | Setiap invoice bulan lalu × **rate tier bulan asal invoice itu** | 0 | 0 |
+| **Incentive Payout** | Current Month + Previous Month | 2.500.000,00 | 960.000,00 |
+| **Bonus Payout** | Paid Bonus × Bonus Rate (1%) | 766.666,67 | 0 |
+
+Contoh **Incentive Payout Previous Month** (Bella di Demo Nov 2026):
+
+```text
+Invoice INV/2026/04596 tanggal 25 Okt, 50.000.000, lunas 10 Nov
+Rate yang dipakai   = Tier 3 Oktober (0,675%), bukan tier November (Tier 0)
+Paid Prior Month    = 50.000.000
+Payout Prev. Month  = 50.000.000 × 0,675% = 337.500
+```
+
+### 33.3 Angka di Payout — Bagian Branch
+
+Contoh memakai **Andi** di Demo Okt 2026.
+
+| Kolom | Rumus | Andi |
+|---|---|---:|
+| **Branch Target** | Total Target di Branch Target (dasar + carry-forward) | 1.000.000.000 |
+| **Branch Net Sales** | Net Sales semua orang di cabang × business type itu | 930.000.000 |
+| **Branch Achievement** | Branch Net Sales ÷ Branch Target | 93,00% |
+| **Branch Tier** | Tier yang cocok dengan Branch Achievement. Batas Tier 4 untuk Mixed **tidak** berlaku di sini | Tier 3 |
+| **Branch Payout Rate** | Rate Branch Tier | 0,675% |
+| **Branch Pool / Branch Eligible Base** | Jumlah **Incentive Payout Current Month** semua anggota tim yang ikut branch | 4.472.500,00 |
+| **Branch FTE Weight** | FTE Branch orang itu | 1,5 |
+| **Branch FTE Share** | FTE orang ÷ total FTE yang ikut (termasuk Global Branch Member) | 1,5 ÷ 5,75 = 26,09% |
+| **Branch Paid Base** | Branch Pool × Branch FTE Share | 1.166.739,13 |
+| **Branch Payout** | Branch Paid Base × Branch Payout Rate | 7.875,49 |
+
+Yang **ikut** branch payout adalah anggota tim yang eligible branch dan **sudah aktif pada tanggal 1** periode, ditambah Global Branch Member. Karyawan yang baru masuk di tengah bulan (seperti Dewi) belum ikut di bulan itu.
+
+### 33.4 Total dan Status Payout
+
+| Kolom | Rumus | Andi |
+|---|---|---:|
+| **Total Payout** | Incentive Payout + Bonus Payout + Branch Payout | 2.500.000 + 766.666,67 + 7.875,49 = **3.274.542,16** |
+| **Eligible Month** | Dicentang jika Tier individual atau Branch Tier di atas Tier 0 | ✓ |
+| **Is Frozen** | Dicentang setelah periode / branch di-**Lock**. Angkanya tidak berubah lagi | – |
+
+### 33.5 Angka di Menu Transactions
+
+Satu baris Transactions = satu baris invoice (atau baris POS) untuk satu orang.
+
+| Kolom | Arti / Rumus | Contoh |
+|---|---|---|
+| **Line Amount** | Nilai baris × Share. Credit note / retur bernilai **minus** | Andi di invoice project INV/2026/04599: 100.000.000 × 30% = **30.000.000** |
+| **Share** / **Credit Role** | Persen bagian orang itu dan posisinya (PM, Salesperson 2/3, Salesperson / Cashier) | Dewi: 70%, Salesperson 2 |
+| **Discount Eligible** | Dicentang jika diskon baris ≤ 35% | Candra baris diskon 40%: **tidak** dicentang |
+| **Fully Paid** / **Fully Paid On** | Invoice sudah lunas penuh, dan tanggal lunasnya | Bella INV/2026/04596: lunas 10 Nov |
+| **Source Period** | Bulan **invoice dibuat**. Menentukan tier | Oktober |
+| **Payment Period** | Bulan **invoice lunas**. Menentukan kapan dibayar | November |
+| **Is Prior Period** | Dicentang jika Payment Period lebih lambat dari Source Period | Bella INV/2026/04596: ✓ |
+| **Incentive Allocation** / **Bonus Allocation** | Bagian baris ini yang masuk bucket incentive / bonus. Diisi urut tanggal invoice | Andi INV/2026/04594: 333.333.333,33 / 46.666.666,67 |
+| **Bucket** | *Incentive* jika Incentive Allocation sama dengan atau lebih besar dari Bonus Allocation; *Bonus* jika bagian bonus yang lebih besar; *Excluded* jika keduanya 0 | Andi INV/2026/04599: Bonus |
+| **Tier (snapshot)** / **Payout Rate (snapshot)** | Tier bulan asal invoice, dibekukan saat Calculate | Candra: Tier 2 / 0,60% |
+| **Payout Amount** | Incentive Allocation × Payout Rate (snapshot) + Bonus Allocation × 1%. Jika ada credit note yang terhubung, kedua allocation dikurangi dulu secara proporsional. Hanya untuk baris yang lunas, eligible, dan bukan DP | lihat di bawah |
+
+Contoh **Payout Amount**:
+
+```text
+Andi   INV/2026/04594 : 333.333.333,33 × 0,75% + 46.666.666,67 × 1% = 2.966.666,67
+Andi   INV/2026/04599 : 0 × 0,75%              + 30.000.000    × 1% =   300.000,00
+Candra INV/2026/04597 : (170.000.000 − 10.000.000) × 0,60%           =   960.000,00
+Candra baris diskon 40% : tidak eligible                             =         0
+```
+
+Jumlah Payout Amount per orang = Incentive Payout + Bonus Payout-nya. Andi: 2.966.666,67 + 300.000 = 3.266.666,67 = 2.500.000 + 766.666,67. Branch Payout tidak tercatat di Transactions.
+
+### 33.6 Cara Membaca Computation Log
+
+Di form Payout, tab **Computation Log** menyimpan jejak perhitungan. Contoh log **Andi** (Demo Okt 2026):
+
+```text
+Target incentive=333333333.33 bonus=46082949.31 mixed=True
+SQ1 net=410000000.0 / target=333333333.33 => 1.2300 => Tier 4 (rate 0.007500)
+SQ2 eligible=410000000.0 excluded=0 -> incentive=333333333.33 bonus=76666666.67
+SQ3 paid_current=333333333.33 x 0.007500 = 2500000.0
+SQ3 paid_prior=0 (own frozen rates) = 0.0
+Bonus 76666666.67 x 0.010000 = 766666.67
+```
+
+| Baris | Artinya |
+|---|---|
+| `Target ... mixed=True` | Target incentive 333,3 jt dan target bonus 46,1 jt, jadi Andi masuk skema mixed |
+| `SQ1 net=... => 1.2300 => Tier 4` | Net sales 410 jt ÷ target 333,3 jt = 123%. Tier dibatasi ke Tier 4 karena mixed, rate 0,75% |
+| `SQ2 eligible=... excluded=0` | Semua 410 jt eligible: 333,3 jt masuk bucket incentive, 76,7 jt masuk bucket bonus |
+| `SQ3 paid_current=... = 2500000.0` | Bucket incentive yang lunas × 0,75% = 2,5 jt |
+| `SQ3 paid_prior=0` | Tidak ada invoice bulan lalu yang lunas bulan ini |
+| `Bonus ... = 766666.67` | Bucket bonus yang lunas × 1% |
+
+Angka di log memakai titik sebagai desimal (format sistem). Contoh: `0.007500` = 0,75%.
+
+### 33.7 Kenapa Hasilnya Begini?
+
+| Pertanyaan | Penyebab | Contoh |
+|---|---|---|
+| Ada sales, tapi Incentive Payout 0 | Achievement di bawah 75% (Tier 0) | Tanpa invoice 50 jt, Bella hanya 150 jt ÷ 222,2 jt = 67,5% → Tier 0 → payout 0 |
+| Achievement tepat 90%, kenapa Tier 3 bukan Tier 2? | Tier berlaku jika **batas bawah ≤ achievement < batas atas**. Angka yang tepat di batas masuk ke tier atas | Bella 90,00% → Tier 3 (90%–99,9%) |
+| Achievement 123% tapi Tier 4, bukan Tier 5 | Punya target bonus (mixed), sehingga tier dibatasi maksimal Tier 4 | Andi |
+| Net Sales besar tapi payout kecil | Sebagian invoice **belum lunas**. Tier dihitung dari semua invoice, payout hanya dari yang lunas | Bella: net 200 jt, dibayar dari 150 jt |
+| Invoice lunas bulan ini, tapi rate-nya beda dengan tier bulan ini | Invoice bulan lalu dibayar dengan **rate bulan asal invoice** | Bella November dibayar 0,675% (tier Oktober) |
+| Satu baris invoice tidak menghasilkan payout | Diskon baris lebih dari 35% | Candra, baris 30 jt diskon 40% |
+| Setelah credit note, tier dan payout turun | Credit note mengurangi Net Sales (tier) dan dasar payout invoice asalnya | Candra: net 200 → 190 jt (Tier 2), dasar 170 → 160 jt |
+| DP tidak menghasilkan payout | DP hanya dihitung untuk tier. Payout menunggu invoice final lunas | lihat contoh di bawah |
+| Target orang baru lebih kecil | Target dihitung prorata sesuai hari aktif | Dewi 16/31 → 114,7 jt |
+| Orang baru tidak dapat Branch Payout | Belum aktif pada tanggal 1 periode | Dewi, Oktober |
+| Support / Pak Kenny dapat payout tanpa sales | Mereka ikut Branch Payout sesuai FTE branch | Eko 1.312,58; Kenny 10.500,65 |
+| Target bulan ini lebih besar dari pembagian biasa | Ada carry-forward dari kekurangan bulan lalu yang sudah Locked | 33.1 |
+| Saya yang buat Sales Order, tapi tidak dapat apa-apa | SO punya project, dan Anda tidak tercantum di project | Bella pada Proyek Interior Kantor |
+| Total payout satu cabang kecil padahal tim besar | Branch Payout dihitung dari **Incentive Payout Current Month** tim, bukan dari nilai sales | Pool 4,47 jt × 0,675% |
+
+**Contoh DP** *(contoh ilustrasi)*
+
+Order 100 juta dengan Down Payment 50 juta. Tier bulan itu 0,75%.
+
+| Bulan | Baris Invoice | Gross Sales (untuk tier) | Dasar Payout (setelah lunas) |
+|---|---|---:|---:|
+| Januari | DP 50 jt | +50 jt | 0 (DP tidak dibayar) |
+| Februari | Produk 100 jt dan potongan DP −50 jt | +100 jt − 50 jt = +50 jt | 100 jt |
+
+Jadi order ini menambah achievement Januari 50 jt dan Februari 50 jt. Payout-nya satu kali, **100 jt × rate tier Februari**, setelah invoice final lunas. Order tidak dihitung dua kali.
+
+---
+
+## 34. Contoh 3 Bulan: Juni, Juli, Agustus 2027 (B2B)
+
+Contoh ini menunjukkan bagaimana perhitungan **bersambung dari bulan ke bulan**: kekurangan target dibawa ke bulan berikutnya, invoice yang baru lunas di bulan berikutnya, karyawan resign lalu diganti, dan Down Payment yang dilunasi di bulan lain. Rumus setiap kolom ada di bagian 33.
+
+### 34.1 Data Contoh di Database
+
+| Data | Nama di Odoo |
+|---|---|
+| Cabang | **Demo B2B 2027** (kode DEMO27), Business Type **B2B** |
+| Rule | **Demo Scheme Jun-Agu 2027**, berlaku 1 Juni – 31 Agustus 2027 (tier sama dengan bagian 17) |
+| Periode | **Demo Jun 2027** (Locked), **Demo Jul 2027** (Locked), **Demo Agu 2027** (Calculated) |
+| Karyawan | **[DEMO27] Rudi**, **[DEMO27] Sari**, **[DEMO27] Tono**, **[DEMO27] Wati**, **[DEMO27] Umar** |
+| Project | **[DEMO27] Proyek Kantor Cabang** |
+
+Buka **Sales Incentive → Payouts**, lalu **Group By → Period** untuk melihat ketiga bulan sekaligus. Data dibuat dengan script `seed_incentive_demo_b2b_2027.py`.
+
+### 34.2 Tim dan Kejadian per Bulan
+
+| Karyawan | Role | FTE Branch / Individual | Juni | Juli | Agustus |
+|---|---|---|---|---|---|
+| Rudi | Lead | 1,5 / 1,5 | aktif | aktif, ada **invoice DP** | aktif, **DP dilunasi**, PM project 40% |
+| Sari | Team | 1,0 / 1,0 | aktif, invoice **baru dibayar sebagian** | aktif, invoice Juni **lunas** | aktif |
+| Tono | Team | 1,0 / 1,0 | aktif | **resign 15 Juli** | sudah keluar |
+| Wati | Team | 1,0 / 1,0 | belum masuk | belum masuk | **masuk 1 Agustus** (pengganti Tono), Salesperson 2 project 60% |
+| Umar | Support | 0,25 / 0 | aktif | aktif | aktif |
+| Kenny | Head (Global) | 2,0 / – | ikut branch | ikut branch | ikut branch |
+
+Branch Target setiap bulan: **800.000.000**.
+
+---
+
+### 34.3 Juni 2027
+
+**a. Target (cascade)**
+
+Total FTE individual = Rudi 1,5 + Sari 1 + Tono 1 = **3,5**.
+
+| Karyawan | Perhitungan | Target Incentive |
+|---|---|---:|
+| Rudi | 800.000.000 × 1,5 ÷ 3,5 | 342.857.142,86 |
+| Sari | 800.000.000 × 1 ÷ 3,5 | 228.571.428,57 |
+| Tono | 800.000.000 × 1 ÷ 3,5 | 228.571.428,57 |
+
+**b. Transaksi**
+
+| Invoice | Tanggal | Karyawan | Nilai | Pembayaran |
+|---|---|---|---:|---|
+| INV/2027/00001 | 8 Jun | Rudi | 360.000.000 | lunas 20 Jun |
+| INV/2027/00002 | 10 Jun | Sari | 200.000.000 | **dibayar 100 jt tanggal 25 Jun** (partial), sisanya 10 Jul |
+| INV/2027/00003 | 12 Jun | Tono | 240.000.000 | lunas 28 Jun |
+
+**c. Payout individual**
+
+| Karyawan | Net Sales | Achievement | Tier / Rate | Lunas Juni | Incentive Payout |
+|---|---:|---:|---|---:|---:|
+| Rudi | 360.000.000 | 105,00% | Tier 4 / 0,75% | 360.000.000 | 2.700.000,00 |
+| Sari | 200.000.000 | 87,50% | Tier 2 / 0,60% | **0** | **0** |
+| Tono | 240.000.000 | 105,00% | Tier 4 / 0,75% | 240.000.000 | 1.800.000,00 |
+
+**Sari** sudah mencapai Tier 2, karena invoice yang belum lunas tetap dihitung untuk tier. Tetapi invoice-nya baru dibayar sebagian, jadi **belum ada yang dibayarkan** di bulan Juni.
+
+**d. Branch payout**
+
+```text
+Net sales cabang = 360 + 200 + 240 juta = 800.000.000
+Achievement      = 800.000.000 ÷ 800.000.000 = 100%  →  Tier 4 (0,75%)
+Total FTE branch = Rudi 1,5 + Sari 1 + Tono 1 + Umar 0,25 + Kenny 2 = 5,75
+Pool             = 2.700.000 + 0 + 1.800.000 = 4.500.000
+```
+
+| Orang | Perhitungan | Branch Payout |
+|---|---|---:|
+| Rudi | 4.500.000 × 1,5/5,75 × 0,75% | 8.804,35 |
+| Sari | 4.500.000 × 1/5,75 × 0,75% | 5.869,57 |
+| Tono | 4.500.000 × 1/5,75 × 0,75% | 5.869,57 |
+| Umar | 4.500.000 × 0,25/5,75 × 0,75% | 1.467,39 |
+| Kenny | 4.500.000 × 2/5,75 × 0,75% | 11.739,13 |
+
+**e. Total Juni**
+
+| Karyawan | Incentive | Bonus | Branch | **Total** |
+|---|---:|---:|---:|---:|
+| Rudi | 2.700.000,00 | 0 | 8.804,35 | **2.708.804,35** |
+| Sari | 0 | 0 | 5.869,57 | **5.869,57** |
+| Tono | 1.800.000,00 | 0 | 5.869,57 | **1.805.869,57** |
+| Umar | 0 | 0 | 1.467,39 | **1.467,39** |
+| Kenny | 0 | 0 | 11.739,13 | **11.739,13** |
+| **Total Juni** | | | | **4.533.750,01** |
+
+**f. Lock Juni → kekurangan target dibawa ke bulan berikutnya**
+
+Saat Juni di-**Lock**, sistem menghitung kekurangan target (kolom di menu **Targets**):
+
+| Karyawan | Target | Net Sales | Shortfall | Months Remaining | Carry-Forward / Month |
+|---|---:|---:|---:|---:|---:|
+| Rudi | 342.857.142,86 | 360.000.000 | 0 | 2 | 0 |
+| **Sari** | 228.571.428,57 | 200.000.000 | **28.571.428,57** | 2 (Juli, Agustus) | **14.285.714,29** |
+| Tono | 228.571.428,57 | 240.000.000 | 0 | 2 | 0 |
+
+Kekurangan Sari dibagi ke **2 bulan tersisa** dalam Rule. Juli dan Agustus masing-masing mendapat tambahan target 14.285.714,29.
+
+---
+
+### 34.4 Juli 2027
+
+**a. Target (cascade)**
+
+Tiga hal berubah di bulan Juli:
+
+1. **Tono resign 15 Juli**, jadi dia aktif 15 dari 31 hari (prorata **48,39%**).
+2. Sisa kursi Tono selama 16 hari menjadi **target bonus** untuk orang yang bekerja penuh sebulan (Rudi dan Sari).
+3. Target Sari **bertambah carry-forward** dari Juni.
+
+```text
+Target dasar per kursi Team = 800.000.000 × 1 ÷ 3,5 = 228.571.428,57
+Tono      = 228.571.428,57 × 15/31                 = 110.599.078,34
+Sari      = 228.571.428,57 + 14.285.714,29 (carry) = 242.857.142,86
+Porsi kosong kursi Tono = 228.571.428,57 × 16/31   = 117.972.350,23
+  Bonus Rudi = 117.972.350,23 × 1,5 ÷ 2,5          =  70.783.410,14
+  Bonus Sari = 117.972.350,23 × 1   ÷ 2,5          =  47.188.940,09
+```
+
+| Karyawan | Target Incentive | Target Bonus |
+|---|---:|---:|
+| Rudi | 342.857.142,86 | 70.783.410,14 |
+| Sari | 242.857.142,86 (termasuk carry 14.285.714,29) | 47.188.940,09 |
+| Tono | 110.599.078,34 | – |
+
+Branch Target Juli ikut bertambah: 800.000.000 + carry-forward tim 14.285.714,29 = **814.285.714,29**.
+
+**b. Transaksi**
+
+| Invoice | Tanggal | Karyawan | Nilai | Catatan | Pembayaran |
+|---|---|---|---:|---|---|
+| INV/2027/00007 | 5 Jul | Tono | 60.000.000 | | lunas 12 Jul |
+| INV/2027/00004 | 6 Jul | Rudi | 300.000.000 | | lunas 16 Jul |
+| INV/2027/00006 | 9 Jul | Sari | 260.000.000 | | lunas 19 Jul |
+| INV/2027/00005 | 20 Jul | Rudi | 100.000.000 | **Down Payment** | lunas 22 Jul |
+| INV/2027/00002 | (10 Jun) | Sari | 200.000.000 | invoice **Juni** | **sisa dibayar 10 Jul → lunas** |
+
+**c. Payout individual**
+
+| Karyawan | Net Sales | Achievement | Tier / Rate | Dasar Lunas | Payout |
+|---|---:|---:|---|---|---:|
+| Rudi | 400.000.000 | 116,67% | Tier 5 → **dibatasi Tier 4** / 0,75% | 300.000.000 (DP tidak dibayar) | Current 2.250.000,00 |
+| Sari | 260.000.000 | 107,06% | Tier 4 / 0,75% | incentive 242.857.142,86 + bonus 17.142.857,14 | Current 1.821.428,57 + Bonus 171.428,57 |
+| Sari (invoice Juni) | | | rate **Juni** Tier 2 / 0,60% | 200.000.000 | **Prior 1.200.000,00** |
+| Tono | 60.000.000 | 54,25% | **Tier 0** / 0% | 60.000.000 | 0 |
+
+Penjelasan:
+
+- **Rudi**: invoice DP 100 jt **menaikkan tier**. Tanpa DP, achievement-nya hanya 300 ÷ 342,9 = 87,5% (Tier 2). Dengan DP menjadi 116,7%. Karena Rudi punya target bonus (mixed), tier dibatasi di Tier 4. DP-nya sendiri **tidak dibayar**; yang dibayar hanya invoice 300 jt.
+- **Sari**:
+  - Penjualan Juli 260 jt melewati target 242,9 jt. Bagian sampai target masuk **bucket incentive** (× 0,75%), sisanya 17,1 jt masuk **bucket bonus** (× 1%).
+  - Invoice Juni 200 jt baru **lunas** di Juli, jadi dibayar sekarang sebagai **Incentive Payout Previous Month**. Rate-nya memakai tier **bulan asal invoice** (Juni, Tier 2 = 0,60%), bukan tier Juli: 200.000.000 × 0,60% = **1.200.000**. Seluruh 200 jt dibayar di Juli, karena pembayaran sebagian di Juni tidak dihitung.
+- **Tono**: achievement 54% (di bawah 75%), sehingga Tier 0 dan payout 0 walaupun invoice-nya lunas.
+
+**d. Branch payout**
+
+```text
+Net sales cabang = 400 + 260 + 60 juta          = 720.000.000
+Achievement      = 720.000.000 ÷ 814.285.714,29 = 88,42%  →  Tier 2 (0,60%)
+Total FTE branch = Rudi 1,5 + Sari 1 + Tono 1 + Umar 0,25 + Kenny 2 = 5,75
+Pool             = 2.250.000 + 1.821.428,57 + 0 = 4.071.428,57
+```
+
+Catatan:
+
+- Tono masih ikut branch karena dia **aktif pada tanggal 1 Juli**.
+- Branch Target naik karena carry-forward Sari. Tanpa carry-forward, achievement cabang 90% (Tier 3). Dengan carry-forward menjadi 88,42% (Tier 2).
+- Pool hanya dari **Payout Current**. Payout Prior Sari (1,2 jt) dan Bonus Payout **tidak** ikut pool.
+
+| Orang | Perhitungan | Branch Payout |
+|---|---|---:|
+| Rudi | 4.071.428,57 × 1,5/5,75 × 0,60% | 6.372,67 |
+| Sari | 4.071.428,57 × 1/5,75 × 0,60% | 4.248,45 |
+| Tono | 4.071.428,57 × 1/5,75 × 0,60% | 4.248,45 |
+| Umar | 4.071.428,57 × 0,25/5,75 × 0,60% | 1.062,11 |
+| Kenny | 4.071.428,57 × 2/5,75 × 0,60% | 8.496,89 |
+
+**e. Total Juli**
+
+| Karyawan | Current | Prior | Bonus | Branch | **Total** |
+|---|---:|---:|---:|---:|---:|
+| Rudi | 2.250.000,00 | 0 | 0 | 6.372,67 | **2.256.372,67** |
+| Sari | 1.821.428,57 | 1.200.000,00 | 171.428,57 | 4.248,45 | **3.197.105,59** |
+| Tono | 0 | 0 | 0 | 4.248,45 | **4.248,45** |
+| Umar | 0 | 0 | 0 | 1.062,11 | **1.062,11** |
+| Kenny | 0 | 0 | 0 | 8.496,89 | **8.496,89** |
+| **Total Juli** | | | | | **5.467.285,71** |
+
+**f. Lock Juli**
+
+| Karyawan | Target | Net Sales | Shortfall | Carry-Forward / Month (1 bulan tersisa) |
+|---|---:|---:|---:|---:|
+| Rudi | 342.857.142,86 | 400.000.000 | 0 | 0 |
+| Sari | 242.857.142,86 | 260.000.000 | 0 | 0 |
+| Tono | 110.599.078,34 | 60.000.000 | 50.599.078,34 | 50.599.078,34 |
+
+Kekurangan Tono tercatat, tetapi Tono sudah keluar dan **tidak ikut cascade Agustus**. Karena itu carry-forward-nya **tidak dibebankan ke siapa pun**. Carry-forward selalu melekat ke orangnya sendiri, tidak dipindah ke penggantinya.
+
+---
+
+### 34.5 Agustus 2027
+
+**a. Target (cascade)**
+
+Tono sudah keluar, dan **Wati masuk 1 Agustus** sebagai pengganti. Tidak ada kursi kosong, jadi **tidak ada target bonus** bulan ini.
+
+| Karyawan | Perhitungan | Target Incentive |
+|---|---|---:|
+| Rudi | 800.000.000 × 1,5 ÷ 3,5 | 342.857.142,86 |
+| Sari | 228.571.428,57 + 14.285.714,29 (cicilan ke-2 dari Juni) | 242.857.142,86 |
+| Wati | 800.000.000 × 1 ÷ 3,5 (aktif penuh sejak tanggal 1) | 228.571.428,57 |
+
+**b. Transaksi**
+
+| Invoice | Tanggal | Credit ke | Nilai | Catatan | Lunas |
+|---|---|---|---:|---|---|
+| INV/2027/00008 | 5 Agu | Rudi | 250.000.000 dan **−100.000.000** | Pelunasan order DP Juli: baris produk 250 jt + baris potongan DP | 15 Agu |
+| INV/2027/00009 | 10 Agu | Rudi | 200.000.000 | | 20 Agu |
+| INV/2027/00010 | 12 Agu | Sari | 150.000.000 | | 22 Agu |
+| INV/2027/00011 | 14 Agu | Wati | 180.000.000 | | 24 Agu |
+| INV/2027/00012 | 18 Agu | Rudi (PM 40%) | 40.000.000 | Invoice project 100 jt | 28 Agu |
+| INV/2027/00012 | 18 Agu | Wati (Salesperson 2, 60%) | 60.000.000 | Invoice project 100 jt | 28 Agu |
+
+**c. Payout individual**
+
+| Karyawan | Net Sales | Achievement | Tier / Rate | Dasar Lunas | Incentive Payout |
+|---|---:|---:|---|---:|---:|
+| Rudi | 390.000.000 | 113,75% | **Tier 5** / 0,7875% | 490.000.000 | 3.858.750,00 |
+| Sari | 150.000.000 | 61,76% | **Tier 0** / 0% | 150.000.000 | 0 |
+| Wati | 240.000.000 | 105,00% | Tier 4 / 0,75% | 240.000.000 | 1.800.000,00 |
+
+Penjelasan:
+
+- **Rudi — Net Sales 390 jt, tetapi dasar payout 490 jt.** Dua angka ini memang berbeda:
+
+  ```text
+  Net Sales (untuk tier) = 250 − 100 (potongan DP) + 200 + 40 (project) = 390.000.000
+  Dasar payout           = 250 (produk, tanpa baris DP) + 200 + 40     = 490.000.000
+  ```
+
+  Nilai order-nya 250 jt: DP 100 jt ditagih di Juli, dan sisanya 150 jt ditagih di invoice pelunasan (baris produk 250 jt − potongan DP 100 jt). Achievement order ini terbagi dua: **+100 jt di Juli** dan **+150 jt di Agustus**, total 250 jt. Payout-nya dibayar **sekali di Agustus** dari baris produk 250 jt. DP 100 jt tidak pernah dibayar terpisah, jadi tidak ada yang dihitung dua kali.
+- **Rudi** tidak punya target bonus di Agustus (tidak mixed), sehingga Tier 5 tidak dibatasi.
+- **Sari**: target Agustus lebih tinggi karena cicilan carry-forward kedua (242,9 jt). Penjualan 150 jt = 61,8%, jadi Tier 0.
+- **Wati** (karyawan baru) langsung mendapat target penuh karena mulai tanggal 1. Dia juga mendapat 60% dari invoice project sebagai Salesperson 2.
+
+**d. Branch payout**
+
+```text
+Net sales cabang = 390 + 150 + 240 juta         = 780.000.000
+Achievement      = 780.000.000 ÷ 814.285.714,29 = 95,79%  →  Tier 3 (0,675%)
+Total FTE branch = Rudi 1,5 + Sari 1 + Wati 1 + Umar 0,25 + Kenny 2 = 5,75
+Pool             = 3.858.750 + 0 + 1.800.000    = 5.658.750
+```
+
+Wati ikut branch payout, karena dia sudah aktif pada tanggal 1 Agustus.
+
+| Orang | Perhitungan | Branch Payout |
+|---|---|---:|
+| Rudi | 5.658.750 × 1,5/5,75 × 0,675% | 9.964,32 |
+| Sari | 5.658.750 × 1/5,75 × 0,675% | 6.642,88 |
+| Wati | 5.658.750 × 1/5,75 × 0,675% | 6.642,88 |
+| Umar | 5.658.750 × 0,25/5,75 × 0,675% | 1.660,72 |
+| Kenny | 5.658.750 × 2/5,75 × 0,675% | 13.285,76 |
+
+**e. Total Agustus**
+
+| Karyawan | Incentive | Bonus | Branch | **Total** |
+|---|---:|---:|---:|---:|
+| Rudi | 3.858.750,00 | 0 | 9.964,32 | **3.868.714,32** |
+| Sari | 0 | 0 | 6.642,88 | **6.642,88** |
+| Wati | 1.800.000,00 | 0 | 6.642,88 | **1.806.642,88** |
+| Umar | 0 | 0 | 1.660,72 | **1.660,72** |
+| Kenny | 0 | 0 | 13.285,76 | **13.285,76** |
+| **Total Agustus** | | | | **5.696.946,56** |
+
+Agustus masih berstatus **Calculated**, jadi masih bisa di-Calculate ulang, di-Approve, lalu di-Lock.
+
+---
+
+### 34.6 Ringkasan 3 Bulan
+
+| Karyawan | Juni | Juli | Agustus | **Total 3 Bulan** |
+|---|---:|---:|---:|---:|
+| Rudi | 2.708.804,35 | 2.256.372,67 | 3.868.714,32 | **8.833.891,34** |
+| Sari | 5.869,57 | 3.197.105,59 | 6.642,88 | **3.209.618,04** |
+| Tono | 1.805.869,57 | 4.248,45 | – | **1.810.118,02** |
+| Wati | – | – | 1.806.642,88 | **1.806.642,88** |
+| Umar | 1.467,39 | 1.062,11 | 1.660,72 | **4.190,22** |
+| Kenny | 11.739,13 | 8.496,89 | 13.285,76 | **33.521,78** |
+| **Total** | **4.533.750,01** | **5.467.285,71** | **5.696.946,56** | **15.697.982,28** |
+
+### 34.7 Yang Bisa Dipelajari dari Contoh Ini
+
+| Kejadian | Bulan | Pelajaran |
+|---|---|---|
+| Invoice Sari dibayar sebagian | Juni → Juli | Invoice partial tetap dihitung untuk tier, tetapi baru dibayar setelah **lunas penuh**, memakai rate tier **bulan asal invoice** |
+| Sari di bawah target | Juni → Juli, Agustus | Kekurangan target dibagi ke bulan tersisa dalam Rule, dan baru terbawa setelah bulan itu di-**Lock** |
+| Carry-forward menaikkan target cabang | Juli, Agustus | Branch Target = target dasar + carry-forward tim, sehingga tier cabang bisa turun |
+| Tono resign di tengah bulan | Juli | Target prorata. Sisa kursinya menjadi target bonus untuk orang yang bekerja penuh sebulan |
+| Carry-forward Tono | Juli → Agustus | Carry-forward hanya untuk orangnya sendiri. Jika orangnya sudah keluar, carry-forward hilang |
+| DP Rudi | Juli → Agustus | DP menaikkan tier bulan DP, tidak dibayar sendiri. Payout dibayar sekali dari baris produk invoice pelunasan |
+| Rudi mixed | Juli | Punya target bonus, sehingga tier maksimal Tier 4 |
+| Wati masuk tanggal 1 | Agustus | Karyawan yang mulai tanggal 1 mendapat target penuh dan langsung ikut branch payout |
+| Project Rudi 40% / Wati 60% | Agustus | Kredit dibagi sesuai persen di project |
+| Umar & Kenny | Semua bulan | Tanpa penjualan pun tetap mendapat branch payout sesuai FTE |
+
+---
+
+## 35. Penutup
 
 Modul **VIF Sales Incentive** membantu menghitung insentif dengan lebih rapi, transparan, dan dapat diaudit.
 
