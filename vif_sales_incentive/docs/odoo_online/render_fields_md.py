@@ -43,6 +43,8 @@ def detail(ftype, opts):
         bits.append('Indexed')
     if ftype == 'monetary':
         bits.append('Currency field: `x_currency_id`')
+    if opts.get('tracking'):
+        bits.append('Tracking: %d' % opts['tracking'])
     if opts.get('help'):
         bits.append('Help: %s' % opts['help'])
     return '; '.join(bits)
@@ -64,6 +66,10 @@ for n, name in enumerate(spec['BUILD_ORDER'], 1):
     if name in models:
         _m, label, flds = models[name]
         out.append('## %d. `%s` -- %s (model baru)' % (n, name, label))
+        if name in spec['MAIL_MODELS']:
+            out += ['', '**Chatter:** saat membuat model, centang **Has Mail Thread** '
+                    'dan **Has Mail Activity** (tidak bisa dimatikan lagi). Field '
+                    'dengan *Tracking* diisi di **Enable Ordered Tracking**.']
     else:
         flds = std[name]
         out.append('## %d. `%s` (model standar -- tambah field)' % (n, name))
@@ -73,10 +79,12 @@ for n, name in enumerate(spec['BUILD_ORDER'], 1):
             i, fname, flabel, TYPE_LABEL[ftype], detail(ftype, opts)))
     out.append('')
 
-out += ['## One2many (buat SETELAH semua model di atas ada)', '',
-        '| Model | Field Name | Label | Detail |', '|---|---|---|---|']
+out += ['## One2many & field yang membacanya (buat SETELAH semua model di atas ada)', '',
+        'Buat berurutan dari atas: field Compute di bawah membaca One2many di atasnya.', '',
+        '| Model | Field Name | Label | Type | Detail |', '|---|---|---|---|---|']
 for model, fname, ftype, flabel, opts in spec['EXTRA_FIELDS']:
-    out.append('| `%s` | `%s` | %s | %s |' % (model, fname, flabel, detail(ftype, opts)))
+    out.append('| `%s` | `%s` | %s | %s | %s |' % (
+        model, fname, flabel, TYPE_LABEL[ftype], detail(ftype, opts)))
 out += ['', '## Default Value', '',
         'Studio: klik field -> Properties -> Default Value. Atau Settings -> '
         'Technical -> User-defined Defaults.', '',

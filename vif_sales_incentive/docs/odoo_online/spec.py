@@ -10,7 +10,8 @@ This file is DATA, not an Odoo module file. It is the single source for:
 Field tuple: (name, type, label, options)
   options keys: relation, relation_field, selection, required, related,
                 store, readonly, compute (file under compute/), depends,
-                ondelete, index, help
+                ondelete, index, help, tracking (sequence; model must be
+                in MAIL_MODELS)
 """
 
 SEL_BTYPE = [('b2b', 'B2B'), ('b2c', 'B2C')]
@@ -66,12 +67,15 @@ MODELS = [
             'depends': 'x_allocation,x_rule_id.x_base_rate', 'store': True}),
     ]),
     ('x_incentive_period', 'Incentive Period', [
-        ('x_name', 'char', 'Name', {'required': True}),
-        ('x_date_start', 'date', 'Start Date', {'required': True}),
-        ('x_date_end', 'date', 'End Date', {'required': True}),
+        ('x_name', 'char', 'Name', {'required': True, 'tracking': 10}),
+        ('x_date_start', 'date', 'Start Date', {'required': True, 'tracking': 20}),
+        ('x_date_end', 'date', 'End Date', {'required': True, 'tracking': 30}),
         ('x_company_id', 'many2one', 'Company', {'relation': 'res.company'}),
-        ('x_rule_id', 'many2one', 'Rule Version', {'relation': 'x_incentive_rule'}),
-        ('x_state', 'selection', 'Status', {'selection': [
+        ('x_currency_id', 'many2one', 'Currency', {
+            'relation': 'res.currency', 'related': 'x_company_id.currency_id'}),
+        ('x_rule_id', 'many2one', 'Rule Version', {'relation': 'x_incentive_rule',
+                                                    'tracking': 40}),
+        ('x_state', 'selection', 'Status', {'tracking': 50, 'selection': [
             ('draft', 'Draft'), ('open', 'Open'), ('calculated', 'Calculated'),
             ('approved', 'Approved'), ('locked', 'Locked')]}),
     ]),
@@ -416,6 +420,13 @@ EXTRA_FIELDS = [
      {'relation': 'x_incentive_transaction', 'relation_field': 'x_reversal_of_id'}),
     ('x_incentive_cascade', 'x_line_ids', 'one2many', 'Preview',
      {'relation': 'x_incentive_cascade_line', 'relation_field': 'x_cascade_id'}),
+    # Period totals read the one2many above, so they come after it.
+    ('x_incentive_period', 'x_total_target', 'monetary', 'Total Target', {
+        'compute': 'c_period_total_target.py', 'store': False,
+        'depends': 'x_target_ids.x_amount'}),
+    ('x_incentive_period', 'x_total_payout', 'monetary', 'Total Payout', {
+        'compute': 'c_period_total_payout.py', 'store': False,
+        'depends': 'x_payout_ids.x_total_payout'}),
     ('account.move', 'x_incentive_transaction_ids', 'one2many', 'Incentive Transactions',
      {'relation': 'x_incentive_transaction', 'relation_field': 'x_move_id'}),
     ('pos.order', 'x_incentive_transaction_ids', 'one2many', 'Incentive Transactions',
@@ -423,6 +434,11 @@ EXTRA_FIELDS = [
     ('hr.employee', 'x_incentive_payout_ids', 'one2many', 'Incentive Payouts',
      {'relation': 'x_incentive_payout', 'relation_field': 'x_employee_id'}),
 ]
+
+# Models with a chatter (Settings > Technical > Models > Has Mail Thread /
+# Has Mail Activity). Tick them when creating the model: once on, Odoo does
+# not let them be switched off again.
+MAIL_MODELS = ['x_incentive_period']
 
 # Creation order: masters, then the employee fields every later model relates
 # through, then the rest.

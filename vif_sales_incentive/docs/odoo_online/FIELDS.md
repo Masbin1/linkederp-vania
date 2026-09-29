@@ -84,14 +84,17 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 
 ## 7. `x_incentive_period` -- Incentive Period (model baru)
 
+**Chatter:** saat membuat model, centang **Has Mail Thread** dan **Has Mail Activity** (tidak bisa dimatikan lagi). Field dengan *Tracking* diisi di **Enable Ordered Tracking**.
+
 | # | Field Name | Label | Type | Detail |
 |---|---|---|---|---|
-| 1 | `x_name` | Name | Char (Text) | Required |
-| 2 | `x_date_start` | Start Date | Date | Required |
-| 3 | `x_date_end` | End Date | Date | Required |
+| 1 | `x_name` | Name | Char (Text) | Required; Tracking: 10 |
+| 2 | `x_date_start` | Start Date | Date | Required; Tracking: 20 |
+| 3 | `x_date_end` | End Date | Date | Required; Tracking: 30 |
 | 4 | `x_company_id` | Company | Many2one | Model: `res.company`; On Delete: Set Null |
-| 5 | `x_rule_id` | Rule Version | Many2one | Model: `x_incentive_rule`; On Delete: Set Null |
-| 6 | `x_state` | Status | Selection | Nilai: `draft`=Draft, `open`=Open, `calculated`=Calculated, `approved`=Approved, `locked`=Locked |
+| 5 | `x_currency_id` | Currency | Many2one | Model: `res.currency`; On Delete: Set Null; Related: `x_company_id.currency_id` |
+| 6 | `x_rule_id` | Rule Version | Many2one | Model: `x_incentive_rule`; On Delete: Set Null; Tracking: 40 |
+| 7 | `x_state` | Status | Selection | Nilai: `draft`=Draft, `open`=Open, `calculated`=Calculated, `approved`=Approved, `locked`=Locked; Tracking: 50 |
 
 ## 8. `x_incentive_branch_target` -- Incentive Branch Target (model baru)
 
@@ -305,21 +308,25 @@ Urutan di bawah = urutan pembuatan. Many2one hanya bisa menunjuk model yang suda
 | 9 | `x_note` | Note | Char (Text) |  |
 | 10 | `x_active` | Active | Boolean (Checkbox) |  |
 
-## One2many (buat SETELAH semua model di atas ada)
+## One2many & field yang membacanya (buat SETELAH semua model di atas ada)
 
-| Model | Field Name | Label | Detail |
-|---|---|---|---|
-| `x_incentive_branch` | `x_employee_ids` | Sales Team | Model: `hr.employee`; Field relasi: `x_incentive_branch_id` |
-| `x_incentive_rule` | `x_tier_ids` | Tiers | Model: `x_incentive_rule_tier`; Field relasi: `x_rule_id` |
-| `x_incentive_period` | `x_branch_target_ids` | Branch Targets | Model: `x_incentive_branch_target`; Field relasi: `x_period_id` |
-| `x_incentive_period` | `x_target_ids` | Targets | Model: `x_incentive_target`; Field relasi: `x_period_id` |
-| `x_incentive_period` | `x_payout_ids` | Payouts | Model: `x_incentive_payout`; Field relasi: `x_period_id` |
-| `x_incentive_period` | `x_transaction_ids` | Source Transactions | Model: `x_incentive_transaction`; Field relasi: `x_source_period_id` |
-| `x_incentive_transaction` | `x_reversal_ids` | Reversals | Model: `x_incentive_transaction`; Field relasi: `x_reversal_of_id` |
-| `x_incentive_cascade` | `x_line_ids` | Preview | Model: `x_incentive_cascade_line`; Field relasi: `x_cascade_id` |
-| `account.move` | `x_incentive_transaction_ids` | Incentive Transactions | Model: `x_incentive_transaction`; Field relasi: `x_move_id` |
-| `pos.order` | `x_incentive_transaction_ids` | Incentive Transactions | Model: `x_incentive_transaction`; Field relasi: `x_pos_order_id` |
-| `hr.employee` | `x_incentive_payout_ids` | Incentive Payouts | Model: `x_incentive_payout`; Field relasi: `x_employee_id` |
+Buat berurutan dari atas: field Compute di bawah membaca One2many di atasnya.
+
+| Model | Field Name | Label | Type | Detail |
+|---|---|---|---|---|
+| `x_incentive_branch` | `x_employee_ids` | Sales Team | One2many | Model: `hr.employee`; Field relasi: `x_incentive_branch_id` |
+| `x_incentive_rule` | `x_tier_ids` | Tiers | One2many | Model: `x_incentive_rule_tier`; Field relasi: `x_rule_id` |
+| `x_incentive_period` | `x_branch_target_ids` | Branch Targets | One2many | Model: `x_incentive_branch_target`; Field relasi: `x_period_id` |
+| `x_incentive_period` | `x_target_ids` | Targets | One2many | Model: `x_incentive_target`; Field relasi: `x_period_id` |
+| `x_incentive_period` | `x_payout_ids` | Payouts | One2many | Model: `x_incentive_payout`; Field relasi: `x_period_id` |
+| `x_incentive_period` | `x_transaction_ids` | Source Transactions | One2many | Model: `x_incentive_transaction`; Field relasi: `x_source_period_id` |
+| `x_incentive_transaction` | `x_reversal_ids` | Reversals | One2many | Model: `x_incentive_transaction`; Field relasi: `x_reversal_of_id` |
+| `x_incentive_cascade` | `x_line_ids` | Preview | One2many | Model: `x_incentive_cascade_line`; Field relasi: `x_cascade_id` |
+| `x_incentive_period` | `x_total_target` | Total Target | Monetary | **Compute** `compute/c_period_total_target.py`, Depends `x_target_ids.x_amount`, Not stored; Currency field: `x_currency_id` |
+| `x_incentive_period` | `x_total_payout` | Total Payout | Monetary | **Compute** `compute/c_period_total_payout.py`, Depends `x_payout_ids.x_total_payout`, Not stored; Currency field: `x_currency_id` |
+| `account.move` | `x_incentive_transaction_ids` | Incentive Transactions | One2many | Model: `x_incentive_transaction`; Field relasi: `x_move_id` |
+| `pos.order` | `x_incentive_transaction_ids` | Incentive Transactions | One2many | Model: `x_incentive_transaction`; Field relasi: `x_pos_order_id` |
+| `hr.employee` | `x_incentive_payout_ids` | Incentive Payouts | One2many | Model: `x_incentive_payout`; Field relasi: `x_employee_id` |
 
 ## Default Value
 

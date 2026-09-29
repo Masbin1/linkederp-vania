@@ -47,6 +47,7 @@ def field_vals(model, name, ftype, label, opts):
         'readonly': opts.get('readonly', False),
         'index': opts.get('index', False),
         'help': opts.get('help', False),
+        'tracking': opts.get('tracking', 0),
     }
     if 'relation' in opts:
         vals['relation'] = opts['relation']
@@ -88,6 +89,8 @@ def ensure_field(model, name, ftype, label, opts):
                             'depends': opts.get('depends', ''),
                             'store': opts.get('store', False),
                             'readonly': opts.get('readonly', True)})
+        if opts.get('tracking') and existing.tracking != opts['tracking']:
+            existing.write({'tracking': opts['tracking']})
         return
     IrField.create(field_vals(model, name, ftype, label, opts))
 
@@ -98,8 +101,13 @@ std_by_name = dict(spec['STANDARD_FIELDS'])
 for name in spec['BUILD_ORDER']:
     if name in models_by_name:
         _n, label, flds = models_by_name[name]
-        if not IrModel.search_count([('model', '=', name)]):
-            IrModel.create({'name': label, 'model': name, 'state': 'manual'})
+        mail = name in spec['MAIL_MODELS']
+        rec = IrModel.search([('model', '=', name)], limit=1)
+        if not rec:
+            IrModel.create({'name': label, 'model': name, 'state': 'manual',
+                            'is_mail_thread': mail, 'is_mail_activity': mail})
+        elif mail and not rec.is_mail_thread:
+            rec.write({'is_mail_thread': True, 'is_mail_activity': True})
     else:
         flds = std_by_name[name]
     for fname, ftype, flabel, opts in flds:

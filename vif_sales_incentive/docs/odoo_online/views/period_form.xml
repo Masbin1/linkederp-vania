@@ -24,6 +24,9 @@
             <group>
                 <field name="x_rule_id"/>
                 <field name="x_company_id"/>
+                <field name="x_total_target"/>
+                <field name="x_total_payout"/>
+                <field name="x_currency_id" invisible="1"/>
             </group>
         </group>
         <notebook>
@@ -70,4 +73,5 @@
             </page>
         </notebook>
     </sheet>
+    <chatter/>
 </form>

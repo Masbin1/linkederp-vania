@@ -71,8 +71,9 @@ Untuk setiap model di [FIELDS.md](FIELDS.md), dengan urutan yang sama:
 
 1. **Model Description**: isi label, misalnya `Incentive Period`
 2. **Model**: isi nama teknis persis, misalnya `x_incentive_period`
-3. **Save**. Odoo otomatis menambahkan field `x_name`.
-4. Buka tab **Fields**, lalu tambah field sesuai tabel (lihat bagian 3)
+3. **Khusus `x_incentive_period`**: centang **Has Mail Thread** dan **Has Mail Activity**, supaya form Period punya chatter (riwayat siapa Open/Approve/Lock dan kapan). Kalau modelnya sudah terlanjur dibuat, buka lagi dan centang sekarang, karena data lama tetap aman. Setelah dicentang, Odoo tidak mengizinkannya dimatikan lagi.
+4. **Save**. Odoo otomatis menambahkan field `x_name`.
+5. Buka tab **Fields**, lalu tambah field sesuai tabel (lihat bagian 3)
 
 Urutan pembuatan (sesuai `FIELDS.md`):
 1. `x_incentive_designation`
@@ -91,7 +92,7 @@ Urutan pembuatan (sesuai `FIELDS.md`):
 14. `x_incentive_cascade_line`
 15. `x_incentive_refund`
 16. `x_incentive_refund_policy`
-17. terakhir: semua field **One2many**
+17. terakhir: semua field **One2many**, lalu `x_total_target` / `x_total_payout` di Period (keduanya membaca One2many Targets / Payouts)
 
 ---
 
@@ -114,6 +115,7 @@ Isi sesuai kolom di `FIELDS.md`:
 | Compute `compute/xxx.py` | tab **Advanced Properties** → **Dependencies** = isi *Depends*, **Compute** = isi file `compute/xxx.py`. **Stored** sesuai tabel. Jika tertulis *editable*, matikan **Readonly** |
 | Required / Readonly / Indexed | centang yang sesuai |
 | Currency field: `x_currency_id` | **Currency field** = `x_currency_id` (buat `x_currency_id` lebih dulu) |
+| Tracking: `10` | **Enable Ordered Tracking** = angka tersebut (urutan tampil di chatter). Hanya di model yang Has Mail Thread |
 
 Tips:
 - **Many2many** `x_incentive_cascade.x_branch_ids`: biarkan Odoo mengisi Relation Table otomatis, atau isi `x_incentive_branch_x_incentive_cascade_rel`.
