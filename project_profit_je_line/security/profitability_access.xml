@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <!--
+        Why this file exists
+        ====================
+        Odoo builds the Profitability panel with the CURRENT USER's rights. A
+        section whose source model the user cannot read is dropped silently, so
+        the row disappears AND the total shrinks with it. Nothing in the browser
+        can undo that: every RPC runs as the user and the server enforces access.
+        The only way to make a row appear is to grant the read it needs.
+
+        Almost every section already sudoes its read upstream. Scanning the
+        _get_*profitability* methods of odoo/addons + enterprise, exactly one
+        model is read without sudo: hr.expense (project_hr_expense and
+        project_sale_expense). That single gap is what hides the Expenses row.
+
+        This is NOT only about users without accounting. Measured on 19.0, same
+        project:
+            admin                            -> {'expenses': -304.35}
+            account.group_account_readonly   -> {}
+        The row needs hr_expense.group_hr_expense_team_approver, which an
+        accounting-readonly user does not have.
+
+        Granted to project.group_project_user because get_panel_data() already
+        returns {} for anyone outside it: the audience of this file is exactly
+        the audience of the panel.
+
+        WHAT THIS GRANTS - read before installing
+        =========================================
+        READ only, never write/create/unlink, and each record rule limits the
+        rows to those carrying a project's analytic account. Costs unrelated to
+        any project stay hidden.
+
+        It is still a real widening: a project user can open the expenses and
+        journal items booked against ANY project, not only their own. That is
+        the price of showing them every row, and it cannot be avoided without
+        server-side code. If it is not acceptable, do not install this module.
+
+        Each grant is a separate record so you can delete the ones you do not
+        want. noupdate="1" means a deletion survives module upgrades.
+    -->
+
+    <!-- =================================================================
+         1. hr.expense - fixes the native "Expenses" row.
+            This is the only grant the native panel needs.
+         ================================================================= -->
+
+    <record id="access_hr_expense_panel" model="ir.model.access">
+        <field name="name">hr.expense: read for project users (profitability panel)</field>
+        <field name="model_id" ref="hr_expense.model_hr_expense"/>
+        <field name="group_id" ref="project.group_project_user"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- sudo() on the subquery, otherwise the rule hits the same access wall
+         it is meant to open. ir.rule._compute_domain is ormcached per user and
+         model, so this search does not run on every query. -->
+    <record id="rule_hr_expense_panel" model="ir.rule">
+        <field name="name">Project users: read expenses booked on a project</field>
+        <field name="model_id" ref="hr_expense.model_hr_expense"/>
+        <field name="groups" eval="[(4, ref('project.group_project_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+        <field name="domain_force">[('analytic_distribution', 'in', user.env['project.project'].sudo().search([]).account_id.ids)]</field>
+    </record>
+
+    <!-- =================================================================
+         2. account.analytic.line - the figure for the "Expense by Journal
+            Entry" row. Delete this pair and that row disappears; the native
+            rows above are unaffected.
+         ================================================================= -->
+
+    <record id="access_account_analytic_line_panel" model="ir.model.access">
+        <field name="name">account.analytic.line: read for project users (profitability panel)</field>
+        <field name="model_id" ref="analytic.model_account_analytic_line"/>
+        <field name="group_id" ref="project.group_project_user"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_account_analytic_line_panel" model="ir.rule">
+        <field name="name">Project users: read analytic lines of projects</field>
+        <field name="model_id" ref="analytic.model_account_analytic_line"/>
+        <field name="groups" eval="[(4, ref('project.group_project_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+        <field name="domain_force">[('account_id', 'in', user.env['project.project'].sudo().search([]).account_id.ids)]</field>
+    </record>
+
+    <!-- =================================================================
+         3. account.move.line / account.move - the JE row's drill-down, and
+            the domain traversal its query does. Delete these two pairs and
+            the row still shows its amount, it just stops being clickable.
+         ================================================================= -->
+
+    <record id="access_account_move_line_panel" model="ir.model.access">
+        <field name="name">account.move.line: read for project users (profitability panel)</field>
+        <field name="model_id" ref="account.model_account_move_line"/>
+        <field name="group_id" ref="project.group_project_user"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_account_move_line_panel" model="ir.rule">
+        <field name="name">Project users: read journal items booked on a project</field>
+        <field name="model_id" ref="account.model_account_move_line"/>
+        <field name="groups" eval="[(4, ref('project.group_project_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+        <field name="domain_force">[('analytic_distribution', 'in', user.env['project.project'].sudo().search([]).account_id.ids)]</field>
+    </record>
+
+    <record id="access_account_move_panel" model="ir.model.access">
+        <field name="name">account.move: read for project users (profitability panel)</field>
+        <field name="model_id" ref="account.model_account_move"/>
+        <field name="group_id" ref="project.group_project_user"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_account_move_panel" model="ir.rule">
+        <field name="name">Project users: read journal entries booked on a project</field>
+        <field name="model_id" ref="account.model_account_move"/>
+        <field name="groups" eval="[(4, ref('project.group_project_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+        <field name="domain_force">[('line_ids.analytic_distribution', 'in', user.env['project.project'].sudo().search([]).account_id.ids)]</field>
+    </record>
+
+</odoo>
