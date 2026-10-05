@@ -237,6 +237,19 @@ Untuk setiap baris:
 | `VIF: Target Movement Reference` | `x_incentive_target_movement` | On create | – | `au_movement_name.py` |
 | `VIF: Invoice Incentive Salesperson` | Journal Entry | On create and edit | Salesperson (`invoice_user_id`) | `au_move_incentive_employee.py` |
 | `VIF: POS Invoice Cashier` | Point of Sale Orders | On create and edit | Invoice (`account_move`) | `au_pos_invoice_cashier.py` |
+| `VIF: POS Journal Analytic Tags` | Point of Sale Orders | On create and edit | Invoice (`account_move`) | `au_pos_journal_analytic.py` |
+
+`au_pos_journal_analytic.py` is **not** part of the Sales Incentive engine -- it
+just lives here because this folder is the Odoo Online Execute Code reference.
+It fixes the gap where a POS-generated Journal Entry has no Analytic
+Distribution (Project / Branch / Business Type), unlike a Sales Order invoice
+tagged by hand. Tested 2026-10-02 against `vaniaeut_online` via `odoo-bin
+shell` (ran the real code on a POS invoice, rolled back): tags every
+previously-empty line correctly, is idempotent on a second run, never
+overwrites a line already tagged by hand, and skips safely (no crash) when
+the Branch field is empty. See the comment header in the file for the
+confirmed field/account IDs for that database -- re-check them if this runs
+anywhere else.
 
 ---
 

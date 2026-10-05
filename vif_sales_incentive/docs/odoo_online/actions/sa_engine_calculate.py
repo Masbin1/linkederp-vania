@@ -266,6 +266,93 @@ def bt_for_employee(emp):
         ('x_business_type', '=', emp.x_incentive_business_type)], limit=1)
 
 
+# --- Computation Log helpers: every figure lists the documents it came from
+ROLE_LABEL = {'pm': 'PM', 'sp2': 'Salesperson 2', 'sp3': 'Salesperson 3',
+              'salesperson': 'Salesperson/Kasir'}
+
+
+def fmt(x):
+    """1234567.8 -> '1.234.567,80' (Indonesian notation)."""
+    s = '%.2f' % (x or 0.0)
+    neg = s.startswith('-')
+    if neg:
+        s = s[1:]
+    whole = s.split('.')[0]
+    dec = s.split('.')[1]
+    parts = []
+    while len(whole) > 3:
+        parts.insert(0, whole[-3:])
+        whole = whole[:-3]
+    parts.insert(0, whole)
+    return ('-' if neg else '') + '.'.join(parts) + ',' + dec
+
+
+def pct(x):
+    return fmt((x or 0.0) * 100) + '%'
+
+
+def num(x, digits=2):
+    return (('%.' + str(digits) + 'f') % (x or 0.0)).replace('.', ',')
+
+
+def rpct(x):
+    """Payout rate: 0.007875 -> '0,7875%'."""
+    s = '%.4f' % ((x or 0.0) * 100)
+    while s.endswith('0') and not s.endswith('.0'):
+        s = s[:-1]
+    if s.endswith('.0'):
+        s = s[:-2] + '.00'
+    return s.replace('.', ',') + '%'
+
+
+def dstr(d):
+    return d.strftime('%d/%m/%Y') if d else '-'
+
+
+def tx_ref(t):
+    if t.x_source_type == 'pos':
+        return t.x_pos_order_id.pos_reference or t.x_pos_order_id.name or '-'
+    return t.x_move_id.name or '-'
+
+
+def tx_who(t):
+    who = '%s %s%%' % (ROLE_LABEL.get(t.x_split_role, t.x_split_role or '-'),
+                       ('%.0f' % ((t.x_split_share or 0.0) * 100)))
+    if t.x_project_id:
+        who += ' - %s' % t.x_project_id.name
+    return who
+
+
+def grouped(txs, with_discount=False):
+    """One log row per document (and role / discount), amounts summed, in
+    invoice-date order."""
+    keys = []
+    rows = {}
+    for t in txs.sorted('x_invoice_date'):
+        key = (tx_ref(t), t.x_split_role, t.x_split_share, t.x_project_id.id,
+               t.x_discount if with_discount else 0)
+        if key not in rows:
+            keys.append(key)
+            rows[key] = [t, 0.0]
+        rows[key][1] += t.x_base_amount
+    res = []
+    for key in keys:
+        res.append((rows[key][0], rows[key][1]))
+    return res
+
+
+def doc_lines(txs, with_discount=False):
+    out = []
+    for item in grouped(txs, with_discount):
+        t = item[0]
+        extra = (' diskon %s%%' % num(t.x_discount, 1)) if with_discount else ''
+        out.append('    %-16s %s  %-38s%s %18s' % (
+            tx_ref(t), dstr(t.x_invoice_date), tx_who(t)[:38], extra, fmt(item[1])))
+    if not out:
+        out.append('    (tidak ada)')
+    return out
+
+
 def get_payout(emp):
     row = Payout.search([
         ('x_period_id', '=', period.id), ('x_employee_id', '=', emp.id)], limit=1)
@@ -567,6 +654,7 @@ if only_bt:
     tgt_domain += [('x_branch_id', '=', only_bt.x_branch_id.id),
                    ('x_business_type', '=', only_bt.x_business_type)]
 touched = Payout
+logged = {}
 if only_payout:
     run_emps = only_payout.x_employee_id
 else:
@@ -587,7 +675,6 @@ for emp in run_emps:
     t_inc = target_amount(emp, 'incentive')
     t_bon = target_amount(emp, 'bonus')
     is_mixed = bool(t_bon)
-    log_lines = ['Target incentive=%s bonus=%s mixed=%s' % (t_inc, t_bon, is_mixed)]
 
     # SQ1 -- tier from ALL invoices of the month (unpaid, DP, >cap included)
     source_tx = Tx.search([
@@ -596,16 +683,15 @@ for emp in run_emps:
         ('x_state', '!=', 'reversed')])
     gross = sum(source_tx.filtered(
         lambda t: t.x_transaction_type == 'invoice').mapped('x_base_amount'))
-    returns = abs(sum(Tx.search([
+    returns_tx = Tx.search([
         ('x_employee_id', '=', emp.id),
         ('x_transaction_type', '=', 'refund'),
-        ('x_source_period_id', '=', period.id)]).mapped('x_base_amount')))
+        ('x_source_period_id', '=', period.id)])
+    returns = abs(sum(returns_tx.mapped('x_base_amount')))
     net = gross - returns
     achievement = (net / t_inc) if t_inc else 0.0
     tier = get_tier(rule, achievement, is_mixed)
     rate = tier_rate(tier)
-    log_lines.append('SQ1 net=%s / target=%s => %.4f => %s (rate %.6f)' % (
-        net, t_inc, achievement, tier.x_name if tier else 'none', rate))
     # Freeze the source tier onto this month's rows: a prior-period invoice
     # paid later is paid at THIS rate, never the later month's.
     source_tx.filtered(lambda t: t.x_state != 'paid_out').write({
@@ -625,8 +711,6 @@ for emp in run_emps:
     else:
         elig_inc = eligible_base
         elig_bon = 0.0
-    log_lines.append('SQ2 eligible=%s excluded=%s -> incentive=%s bonus=%s' % (
-        eligible_base, excluded, elig_inc, elig_bon))
 
     remaining_inc = elig_inc
     remaining_bon = elig_bon
@@ -676,9 +760,6 @@ for emp in run_emps:
         payout_prior += a[0] * t.x_tier_payout_rate   # its OWN frozen rate
     payout_current = paid_current * rate
     payout_bonus = paid_bonus * rule.x_bonus_rate
-    log_lines.append('SQ3 paid_current=%s x %.6f = %s' % (paid_current, rate, payout_current))
-    log_lines.append('SQ3 paid_prior=%s (own frozen rates) = %s' % (paid_prior, payout_prior))
-    log_lines.append('Bonus %s x %.6f = %s' % (paid_bonus, rule.x_bonus_rate, payout_bonus))
 
     for t in (paid_current_tx | prior_tx):
         if not t.x_is_discount_eligible or not t.x_is_payment_eligible or t.x_is_downpayment:
@@ -686,6 +767,103 @@ for emp in run_emps:
         else:
             a = net_alloc(t)
             t.write({'x_payout_amount': a[0] * t.x_tier_payout_rate + a[1] * rule.x_bonus_rate})
+
+    # ---- Computation Log: each figure with the documents behind it ----
+    pname = period.x_name
+    inv_tx = source_tx.filtered(lambda t: t.x_transaction_type == 'invoice')
+    excl_tx = inv_tx.filtered(lambda t: not t.x_is_discount_eligible and not t.x_is_downpayment)
+    dp_tx = inv_tx.filtered(lambda t: t.x_is_downpayment)
+    unpaid_tx = eligible_tx - paid_current_tx
+    uncapped = get_tier(rule, achievement, False)
+    L = []
+    L.append('TARGET %s' % pname)
+    L.append('    Target Incentive : %s' % fmt(t_inc))
+    L.append('    Target Bonus     : %s%s' % (fmt(t_bon), '  (punya target bonus -> skema mixed)' if is_mixed else ''))
+    L.append('')
+    L.append('[1] GROSS SALES = semua baris invoice %s atas nama karyawan ini' % pname)
+    L.append('    (lunas maupun belum, termasuk DP dan diskon besar; nilai sebelum pajak x share)')
+    L += doc_lines(inv_tx)
+    L.append('    = Gross Sales: %s  (%s dokumen)' % (fmt(gross), len(grouped(inv_tx))))
+    L.append('')
+    L.append('[2] SALES RETURN = credit note / retur %s' % pname)
+    L += doc_lines(returns_tx)
+    L.append('    = Sales Return: %s' % fmt(returns))
+    L.append('')
+    L.append('[3] NET SALES = Gross Sales - Sales Return = %s - %s = %s' % (fmt(gross), fmt(returns), fmt(net)))
+    L.append('    ACHIEVEMENT = Net Sales / Target Incentive = %s / %s = %s' % (fmt(net), fmt(t_inc), pct(achievement)))
+    L.append('    -> %s, payout rate %s' % (tier.x_name if tier else 'Tier 0', rpct(rate)))
+    if tier and uncapped and uncapped != tier:
+        L.append('    (seharusnya %s, dibatasi %s karena skema mixed)' % (uncapped.x_name, tier.x_name))
+    L.append('')
+    L.append('[4] ELIGIBLE = Gross Sales dikurangi baris yang tidak boleh dibayar')
+    L.append('    Dikeluarkan - diskon di atas %s%%:' % ('%.0f' % max_discount))
+    L += doc_lines(excl_tx, True)
+    L.append('    Dikeluarkan - baris Down Payment (hanya untuk tier):')
+    L += doc_lines(dp_tx)
+    L.append('    = Excluded (Discount > cap): %s' % fmt(excluded))
+    L.append('    = Eligible: %s - %s - %s (DP) = %s' % (fmt(gross), fmt(excluded), fmt(sum(dp_tx.mapped('x_base_amount'))), fmt(eligible_base)))
+    L.append('      Eligible Achievement Incentive: %s%s' % (fmt(elig_inc), '  (maks. sebesar Target Incentive)' if is_mixed else ''))
+    L.append('      Eligible Achievement Bonus    : %s' % fmt(elig_bon))
+    L.append('')
+    L.append('[5] PAID CURRENT MONTH = baris eligible yang LUNAS PENUH di %s' % pname)
+    for item in grouped(paid_current_tx):
+        t = item[0]
+        L.append('    %-16s %s  lunas %s %18s' % (tx_ref(t), dstr(t.x_invoice_date), dstr(t.x_payment_date), fmt(item[1])))
+    if not paid_current_tx:
+        L.append('    (tidak ada)')
+    if abs(sum(paid_current_tx.mapped('x_base_amount')) - paid_current - paid_bonus) > 0.005:
+        L.append('    (dikurangi credit note yang terhubung ke invoice di atas)')
+    L.append('    = Paid Current Month: %s   Paid Bonus: %s' % (fmt(paid_current), fmt(paid_bonus)))
+    if rate:
+        L.append('    Belum lunas penuh di %s (dibayar di bulan lunasnya, dengan rate %s):' % (pname, rpct(rate)))
+    else:
+        L.append('    Belum lunas penuh di %s (Tier 0 bulan ini: TIDAK dibayar walaupun nanti lunas):' % pname)
+    for item in grouped(unpaid_tx):
+        t = item[0]
+        if t.x_payment_period_id:
+            when = 'lunas %s -> dibayar di %s' % (dstr(t.x_payment_date), t.x_payment_period_id.x_name)
+        elif t.x_payment_date:
+            when = 'lunas %s -> periode bulan itu BELUM DIBUAT' % dstr(t.x_payment_date)
+        else:
+            when = 'belum lunas'
+        L.append('    %-16s %s %18s  %s' % (tx_ref(t), dstr(t.x_invoice_date), fmt(item[1]), when))
+    if not unpaid_tx:
+        L.append('    (tidak ada)')
+    L.append('')
+    L.append('[6] PAID PRIOR MONTH = invoice bulan sebelumnya yang baru lunas di %s' % pname)
+    for t in prior_tx.sorted('x_invoice_date'):
+        a = net_alloc(t)
+        L.append('    %-16s %s (%s, rate %s) lunas %s %16s -> %s' % (
+            tx_ref(t), dstr(t.x_invoice_date), t.x_source_period_id.x_name, rpct(t.x_tier_payout_rate),
+            dstr(t.x_payment_date), fmt(a[0]), fmt(a[0] * t.x_tier_payout_rate)))
+    if not prior_tx:
+        L.append('    (tidak ada)')
+    L.append('    = Paid Prior Month: %s' % fmt(paid_prior))
+    skipped_prior = Tx.search([
+        ('x_employee_id', '=', emp.id),
+        ('x_payment_period_id', '=', period.id),
+        ('x_source_period_id', '!=', period.id),
+        ('x_transaction_type', '=', 'invoice'),
+        ('x_state', '!=', 'reversed')]) - prior_tx
+    if skipped_prior:
+        L.append('    Lunas di %s tapi TIDAK dibayar:' % pname)
+        for t in skipped_prior.sorted('x_invoice_date'):
+            if t.x_is_downpayment:
+                why = 'baris Down Payment'
+            elif not t.x_is_discount_eligible:
+                why = 'diskon %s%% di atas batas' % num(t.x_discount, 1)
+            else:
+                why = 'bulan asal (%s) tidak punya tier / Tier 0 untuk karyawan ini' % t.x_source_period_id.x_name
+            L.append('    %-16s %s %18s  %s' % (tx_ref(t), dstr(t.x_invoice_date), fmt(t.x_base_amount), why))
+    L.append('')
+    L.append('[7] PAYOUT INDIVIDU')
+    L.append('    Incentive Payout Current Month  = %s x %s = %s' % (fmt(paid_current), rpct(rate), fmt(payout_current)))
+    L.append('    Incentive Payout Previous Month = jumlah [6], rate bulan asal masing-masing = %s' % fmt(payout_prior))
+    L.append('    Bonus Payout                    = %s x %s = %s' % (fmt(paid_bonus), rpct(rule.x_bonus_rate), fmt(payout_bonus)))
+    if only_payout:
+        L.append('')
+        L.append('[8] BRANCH PAYOUT tidak dihitung ulang oleh Recompute (tetap %s).' % fmt(payout.x_branch_payout))
+    logged[payout.id] = True
 
     payout.write({
         'x_target_incentive': t_inc,
@@ -706,7 +884,7 @@ for emp in run_emps:
         'x_payout_current': payout_current,
         'x_payout_prior': payout_prior,
         'x_payout_bonus': payout_bonus,
-        'x_computation_log': '\n'.join(log_lines),
+        'x_computation_log': '\n'.join(L),
     })
 
 # ---------------------------------------------------------------------
@@ -756,18 +934,45 @@ if not only_payout:
                 continue
             team_data.append((p, e, e.x_incentive_designation_id.x_fte_branch, True))
             if e.id not in global_accum:
-                global_accum[e.id] = [p, 0.0]
+                global_accum[e.id] = [p, 0.0, []]
         if not team_data:
             continue
 
         pool = sum([d[0].x_payout_current for d in team_data])
         total_fte = sum([d[2] for d in team_data])
+        # Computation Log: where the branch figures come from
+        by_emp = {}
+        order = []
+        for t in btx:
+            if t.x_employee_id.id not in by_emp:
+                by_emp[t.x_employee_id.id] = [t.x_employee_id.name, 0.0]
+                order.append(t.x_employee_id.id)
+            by_emp[t.x_employee_id.id][1] += t.x_base_amount
+        B = ['', '[8] BRANCH PAYOUT - %s %s' % (branch.x_name, (bt.x_business_type or '').upper())]
+        B.append('    Branch Target: %s' % fmt(bt.x_amount_total))
+        B.append('    Branch Net Sales = penjualan bersih semua orang di cabang ini:')
+        for k in order:
+            B.append('      %-34s %18s' % (by_emp[k][0][:34], fmt(by_emp[k][1])))
+        B.append('      = %s' % fmt(b_net))
+        B.append('    Achievement cabang = %s / %s = %s -> %s, rate %s' % (
+            fmt(b_net), fmt(bt.x_amount_total), pct(b_ach), b_tier.x_name if b_tier else 'Tier 0', rpct(b_rate)))
+        B.append('    Tim yang ikut (aktif pada %s) dan Payout Current-nya:' % dstr(period.x_date_start))
+        for d in team_data:
+            B.append('      %-34s FTE %5s  %18s%s' % (d[1].name[:34], num(d[2]), fmt(d[0].x_payout_current),
+                                                  '  (Global Branch Member)' if d[3] else ''))
+        B.append('    Pool = jumlah Payout Current tim = %s    Total FTE = %s' % (fmt(pool), num(total_fte)))
         for d in team_data:
             share = (d[2] / total_fte) if total_fte else 0.0
             bp = pool * share * b_rate
+            formula = '    Branch Payout = %s x %s / %s x %s = %s' % (
+                fmt(pool), num(d[2]), num(total_fte), rpct(b_rate), fmt(bp))
             if d[3]:
                 global_accum[d[1].id][1] += bp
+                global_accum[d[1].id][2] += B + [formula]
             else:
+                base_log = d[0].x_computation_log if logged.get(d[0].id) else (
+                    'Tidak ada target individual di %s -- hanya branch payout.' % period.x_name)
+                d[0].write({'x_computation_log': base_log + '\n' + '\n'.join(B + [formula])})
                 d[0].write({
                     'x_branch_target': bt.x_amount_total,
                     'x_branch_net_sales': b_net,
@@ -783,7 +988,10 @@ if not only_payout:
                     'x_branch_payout': bp,
                 })
     for key in global_accum:
-        global_accum[key][0].write({'x_branch_payout': global_accum[key][1]})
+        g = global_accum[key]
+        g_log = ['Global Branch Member: ikut branch payout di setiap cabang.'] + g[2]
+        g_log += ['', '    Total Branch Payout semua cabang = %s' % fmt(g[1])]
+        g[0].write({'x_branch_payout': g[1], 'x_computation_log': '\n'.join(g_log)})
 
 # ---------------------------------------------------------------------
 # 6. Totals, then state
