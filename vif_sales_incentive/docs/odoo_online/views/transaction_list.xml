@@ -5,6 +5,7 @@
     <field name="x_source_type" optional="show"/>
     <field name="x_move_id" optional="show"/>
     <field name="x_pos_order_id" optional="show"/>
+    <field name="x_partner_id" string="Customer" optional="show"/>
     <field name="x_employee_id"/>
     <field name="x_project_id" optional="show"/>
     <field name="x_split_role" optional="show"/>

@@ -179,6 +179,9 @@ Untuk setiap baris di tabel berikut:
 | `VIF: Period View Payouts` | `x_incentive_period` | `sa_period_view_payouts.py` | Period → smart button Payouts |
 | `VIF: Payout Recompute` | `x_incentive_payout` | `sa_payout_recompute.py` | Payout → Recompute |
 | `VIF: Payout View Transactions` | `x_incentive_payout` | `sa_payout_view_transactions.py` | Payout → smart button Transactions |
+| `VIF: Payout View Gross Sales` | `x_incentive_payout` | `sa_payout_view_gross_sales.py` | Payout → smart button Gross Sales |
+| `VIF: Payout View Paid Current` | `x_incentive_payout` | `sa_payout_view_paid_current.py` | Payout → smart button Paid Current Month |
+| `VIF: Payout View Paid Prior` | `x_incentive_payout` | `sa_payout_view_paid_prior.py` | Payout → smart button Paid Prior Month |
 | `VIF: Branch Target Calculate` | `x_incentive_branch_target` | `sa_bt_calculate.py` | Branch Target → Calculate |
 | `VIF: Branch Target Approve` | `x_incentive_branch_target` | `sa_bt_approve.py` | Branch Target → Approve |
 | `VIF: Branch Target Lock` | `x_incentive_branch_target` | `sa_bt_lock.py` | Branch Target → Lock |
@@ -191,6 +194,28 @@ Untuk setiap baris di tabel berikut:
 | `VIF: Backfill Invoice Salesperson` | `x_incentive_period` | `sa_backfill_incentive_employee.py` | dijalankan sekali (bagian 11) |
 
 Untuk `VIF: Backfill Invoice Salesperson`, klik **Create Contextual Action** supaya muncul di menu ⚙ Actions pada list Period.
+
+### Smart button di Payout: dari mana angkanya?
+
+Di form **Payout**, tombol **Gross Sales**, **Paid Current**, dan **Paid Prior** menampilkan nilai kolomnya masing-masing. Klik tombolnya → terbuka daftar baris **Transactions** yang persis dijumlahkan menjadi angka itu. Jadi alur tracing-nya:
+
+```
+Payout (angka) → klik tombol → daftar baris Transaction (sumber angka)
+              → klik kolom Invoice / POS Order → dokumen asli
+```
+
+Domain tiap tombol disamakan dengan query mesin, jadi baris yang terbuka adalah baris yang benar-benar di-SUM:
+
+| Tombol | Kolom yang dijelaskan | Baris yang dibuka |
+|---|---|---|
+| **Gross Sales** | `x_gross_sales` | Baris `invoice` pada Source Period ini (belum/tidak dibatasi lunas, DP & diskon besar ikut), status ≠ Reversed. |
+| **Paid Current** | `x_paid_current_month` | Baris periode ini yang diskonnya eligible, bukan DP, **lunas pada periode ini** (Payment Period sama). |
+| **Paid Prior** | `x_paid_prior_month` | Invoice periode **sebelumnya** yang lunas pada periode ini, diskon eligible, bukan DP, dan punya alokasi incentive (`x_incentive_alloc > 0`). |
+| **Transactions** | semua kolom di atas + `x_eligible_*`, `x_sales_return` | Semua transaksi yang source- maupun payment-period-nya periode ini. |
+
+Setiap baris Transaction sudah menyimpan tautan ke dokumen asalnya: `x_move_id`/`x_move_line_id` (invoice/credit note) atau `x_pos_order_id`/`x_pos_order_line_id` (order POS), plus `x_partner_id` (customer) dan `x_product_id` — kolom-kolom ini yang ditampilkan di list-nya, dan bisa diklik untuk membuka dokumen aslinya.
+
+Nilai `x_payout_current`, `x_payout_prior`, `x_payout_bonus`, dan `x_branch_*` bukan penjumlahan polos dari kolom transaksi: baris-baris itu lalu dikalikan tarif tier (rate) atau dibagi lewat FTE untuk branch. Rumus tiap kolom ada di `x_computation_log` (tab **Computation Log** di form Payout) dan di panduan user §32–§33.
 
 ### Apa isi Engine Calculate?
 
