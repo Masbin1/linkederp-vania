@@ -54,7 +54,9 @@ patch(ReceiptScreen.prototype, {
 // on that same unconditional trigger, so an invoiced order still
 // auto-downloads even with autoPrint off (matching the native behavior it
 // replaces) — it just downloads our A4 report instead of the native invoice.
-// Non-invoiced orders keep the normal autoPrint-gated canPrintReceipt path.
+// Every synced order (invoiced or not) auto-downloads the A4 PDF, regardless
+// of pos.config.autoPrint. Offline orders fall back to the thermal receipt
+// only when autoPrint is on (the native behaviour).
 patch(OrderPaymentValidation.prototype, {
     shouldDownloadInvoice() {
         return false;
@@ -68,15 +70,11 @@ patch(OrderPaymentValidation.prototype, {
         }
 
         const order = this.order;
-        const shouldAutoDownload = order.isToInvoice() || this.canPrintReceipt;
-
-        if (shouldAutoDownload) {
-            // A4 PDF is generated server-side; an offline order has no server id yet.
-            if (order.isSynced) {
-                await this.pos.env.services.report.doAction(REPORT_XML_ID, [order.id]);
-            } else {
-                await this.pos.printReceipt({ order });
-            }
+        // A4 PDF is generated server-side; an offline order has no server id yet.
+        if (order.isSynced) {
+            await this.pos.env.services.report.doAction(REPORT_XML_ID, [order.id]);
+        } else if (this.canPrintReceipt) {
+            await this.pos.printReceipt({ order });
         }
     },
 });

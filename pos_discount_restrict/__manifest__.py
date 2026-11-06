@@ -1,6 +1,6 @@
 {
     "name": "POS Discount & Stock Restriction",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.0.1",
     "category": "Point of Sale",
     "summary": "Restrict POS discount to group_pos_manager, block validation when out of stock, print A4 receipt",
     "depends": ["point_of_sale"],

@@ -5,7 +5,8 @@
 | | |
 |---|---|
 | Modul | `vif_sales_incentive` |
-| Versi | 19.0.1.0.0 |
+| Versi | 19.0.1.2.0 |
+| Pembaruan dokumen | 2 November 2026 |
 | Author | Muhammad Bintang — Linked ERP (linkederp.com) |
 | Platform | Odoo 19 (Community + Enterprise) |
 | Sumber spesifikasi | `Incentive Scheme -Masbin 1.xlsx` dan `Odoo Incentive Setup Scenario 1.xlsx` |
@@ -32,6 +33,10 @@
 15. [FAQ / Troubleshooting](#15-faq--troubleshooting)
 16. [Batasan & Item Terbuka](#16-batasan--item-terbuka)
 17. [Checklist Go-Live](#17-checklist-go-live)
+18. [Pembagian Kredit per Project](#18-pembagian-kredit-per-project)
+19. [Transaksi POS & Analytic Tags Jurnal POS](#19-transaksi-pos--analytic-tags-jurnal-pos)
+20. [Down Payment](#20-down-payment)
+21. [Membaca Computation Log](#21-membaca-computation-log)
 
 ---
 
@@ -41,12 +46,14 @@ Modul ini menghitung **insentif penjualan per salesperson per bulan** berdasarka
 
 Aturan inti yang harus selalu diingat:
 
-1. **Insentif hanya dibayar dari invoice yang sudah lunas** (*fully paid*).
+1. **Insentif hanya dibayar dari invoice yang sudah lunas** (*fully paid*). Invoice partial belum dibayar.
 2. Hanya **baris invoice dengan diskon ≤ 35%** yang eligible (dinilai **per baris**, bukan per invoice).
 3. Besaran insentif memakai **tier** berdasarkan % pencapaian terhadap target.
-4. **Basis kas (cash basis):** transaksi ditangkap di **bulan invoice lunas** (`incentive_full_payment_date`), bukan bulan terbit invoice. Tier pun dihitung dari net sales bulan lunas.
+4. **Tier mengikuti bulan terbit invoice, payout mengikuti bulan lunas.** Transaksi dicatat di periode `invoice_date` (`source_period_id`), lunas maupun belum, sehingga tier bulan itu dihitung dari seluruh penjualan yang ditagih. Payout dibayar di periode saat invoice lunas (`payment_period_id`). Invoice bulan sebelumnya yang baru lunas bulan ini dibayar dengan **rate tier bulan asalnya** (*Paid Prior Month*).
 5. Setiap salesperson punya **dua bucket target**: Incentive-Based (tiering) dan Bonus-Based (flat).
 6. **Shortfall target** di akhir bulan di-**roll forward per salesperson** ke sisa bulan skema (carry-forward), tidak dicampur antar anggota tim.
+7. **Penerima kredit penjualan:** invoice dengan Project dibagi ke PM / Salesperson 2 / Salesperson 3 sesuai persen komisi (§18); invoice tanpa project ke **Incentive Salesperson**; order POS ke **Cashier** yang login (§19).
+8. **Down Payment** ikut menentukan tier bulan DP diterbitkan, tetapi tidak pernah dibayar sendiri. Payout dibayar dari final invoice saat lunas (§20).
 
 Modul menyimpan seluruh proses dalam model terpisah-pisah agar setiap angka bisa diaudit: target, perpindahan target, transaksi per baris invoice, dan payout per periode.
 
@@ -71,7 +78,7 @@ Angka "1,5% total" pada kategori Incentive-Based sebenarnya adalah penjumlahan d
 | **Individual Incentives** | 0,0075 (0,75%) | Tiering |
 | **Total Incentives** | **0,015 (1,5%)** | — |
 
-> **CATATAN PENTING (status implementasi):** Mesin payout kini **menghitung ketiga stream**: **Individual (0,75%)**, **Branch (0,75%)**, dan **Bonus (1,00%)**. Stream Branch dihitung di `_compute_branch_for_period` — pool cabang = net sales cabang × rate tier cabang, lalu dibagi ke tim sesuai bobot `fte_branch × prorata`. Detail di [§10.7](#107-branch-stream-075).
+> **CATATAN PENTING (status implementasi):** Mesin payout kini **menghitung ketiga stream**: **Individual (0,75%)**, **Branch (0,75%)**, dan **Bonus (1,00%)**. Stream Branch dihitung di `_compute_branch_for_period`: pool cabang = jumlah **Payout Current** individu seluruh tim, lalu dibagi sesuai bobot `fte_branch` dan dikalikan rate tier cabang. Detail di [§10.7](#107-branch-stream-075).
 
 ### 2.2 Tiga sekuens (SQ1, SQ2, SQ3)
 
@@ -79,16 +86,15 @@ Ini bagian yang paling sering salah diimplementasikan. Tiga sekuens memakai **ba
 
 | Sekuens | Basis | Kegunaan |
 |---|---|---|
-| **SQ1** | **Net Sales SEMUA invoice yang lunas** di bulan berjalan (termasuk diskon >35%), dikurangi retur | Hanya untuk **memilih tier** |
-| **SQ2** | Hanya baris dengan **diskon ≤ 35%** | Basis **eligible**, lalu di-split ke bucket incentive/bonus |
-| **SQ3** | Dari SQ2, hanya yang **sudah lunas** | Jumlah yang benar-benar dikalikan rate |
-
-> **Catatan basis kas:** karena transaksi hanya dibuat dari invoice yang **sudah lunas** di bulan itu (lihat §9 Step 3), semua baris yang tertangkap otomatis lunas — SQ3 secara praktis sama dengan SQ2. Ketiga sekuens tetap dipertahankan agar urutan evaluasi (tier → diskon → pembayaran) transparan.
+| **SQ1** | **Net Sales SEMUA invoice** yang terbit di bulan berjalan, lunas maupun belum (termasuk diskon >35% dan DP), dikurangi retur | Hanya untuk **memilih tier** |
+| **SQ2** | Hanya baris dengan **diskon ≤ 35%**, tanpa baris DP | Basis **eligible**, lalu di-split ke bucket incentive/bonus |
+| **SQ3** | Dari SQ2, hanya yang **sudah lunas penuh** di bulan berjalan, ditambah invoice bulan sebelumnya yang baru lunas bulan ini | Jumlah yang benar-benar dikalikan rate |
 
 ```
-Payout = SQ3 × (base_rate 0,75% × allocation tier)
-Branch  = branch_pool × (fte_branch × prorata / Σ fte_branch)   # stream 0,75% cabang
-Bonus   = SQ3_bonus × bonus_rate 1,00%
+Payout Current = SQ3 bulan ini × rate tier bulan ini (base_rate 0,75% × allocation)
+Payout Prior   = Σ invoice bulan lalu yang lunas bulan ini × rate tier bulan asalnya
+Bonus          = SQ3_bonus × bonus_rate 1,00%
+Branch         = Σ Payout Current tim × (fte_branch / Σ fte_branch) × rate tier cabang
 ```
 
 ### 2.3 Tabel Tier
@@ -104,11 +110,18 @@ Bonus   = SQ3_bonus × bonus_rate 1,00%
 
 **Konvensi batas tier:** `min ≤ achievement < max`, kecuali tier teratas yang terbuka. Akibatnya **tepat 75,0% jatuh ke Tier 1** (sesuai contoh new-hire client: 30M/40M = 75% → Tier 1). Tier 0 menangkap rentang `[0% , 75%)`.
 
+Tabel di atas berlaku untuk skema **2H** (Jul–Des). Untuk skema **1H 2026** (Jan–Jun, rule *Incentive Scheme 1H 2026 (Flat Rate)*) berlaku flat rate tanpa tingkatan:
+
+| Tier | Achievement | Allocation | Payout Rate |
+|---|---|---|---|
+| 0 | < 75% | 0,00 | 0,00% |
+| 1 | ≥ 75% | 1,00 | 0,75% |
+
 ### 2.4 Scenario 1 vs Scenario 2 (mixed)
 
 - **Scenario 1 (full incentive-based):** seluruh target adalah incentive-based. Tier 5 tersedia.
 - **Scenario 2 (mixed incentive + bonus):** saat seorang salesperson punya **target bonus > 0**, sistem masuk Scenario 2. Aturannya:
-  1. Bucket incentive **di-cap di target incentive**; sisanya limpah ke bucket bonus (di-cap di target bonus).
+  1. Bucket incentive **di-cap di target incentive**; seluruh sisanya limpah ke bucket bonus. Bucket bonus **tidak di-cap** di target bonus. Target bonus hanya menandai bahwa karyawan berada di Scenario 2, bukan batas atas pembayaran.
   2. **Tier 5 tidak berlaku** untuk bucket incentive → di-cap ke **Tier 4** (S18).
   3. Bucket bonus dibayar **flat 1,00%**, tanpa tiering.
 
@@ -133,8 +146,10 @@ Konsekuensinya: **Support** eligible untuk branch incentive saja, **tidak** indi
 ### 3.1 Dependensi
 
 ```
-base, hr, sale_management, account
+base, hr, sale_management, sale_project, account, point_of_sale, pos_hr
 ```
+
+`sale_project` dibutuhkan untuk pembagian kredit per Project (§18); `point_of_sale` dan `pos_hr` untuk transaksi POS per kasir (§19).
 
 ### 3.2 Struktur berkas
 
@@ -153,7 +168,9 @@ vif_sales_incentive/
 │   ├── incentive_payout.py         # snapshot payout per karyawan
 │   ├── incentive_refund_policy.py  # matriks refund
 │   ├── hr_employee.py              # field tambahan di hr.employee
-│   └── account_move.py             # field tambahan di account.move(.line)
+│   ├── account_move.py             # field tambahan di account.move(.line) + split project
+│   ├── project_project.py          # PM / Salesperson 2 / 3 + persen komisi
+│   └── pos_order.py                # transaksi insentif dari order POS
 ├── wizards/
 │   ├── incentive_target_cascade.py        # wizard cascade RF → individu (model biasa)
 │   ├── incentive_target_cascade_views.xml
@@ -162,7 +179,8 @@ vif_sales_incentive/
 ├── views/                          # seluruh view + menu
 ├── data/                           # seed master (rule, tier, period, designation, dll.)
 ├── security/                       # grup + record rule
-├── tests/                          # suite Odoo (32 kasus) — test_refund_once.py = pengaman refund ganda
+├── tests/                          # suite Odoo: cascade, ideal team, handover, prorata resign,
+│                                   #   project split, basis pembayaran, refund ganda, dll.
 └── test_engine.py                  # replay aritmetika (di luar modul)
 ```
 
@@ -177,13 +195,15 @@ vif_sales_incentive/
 | `incentive.designation` | Bobot FTE (branch vs individual) |
 | `incentive.target` | Dua bucket target per karyawan per periode |
 | `incentive.target.movement` | Audit trail resign/vacant/new-hire/revisi RF |
-| `incentive.transaction` | **Satu baris per baris invoice**; `source_period` = bulan lunas (basis kas) |
+| `incentive.transaction` | **Satu baris per baris invoice / baris POS per penerima kredit**; `source_period` = bulan terbit invoice, `payment_period` = bulan lunas |
 | `incentive.payout` | Snapshot payout per karyawan per periode |
 | `incentive.refund.policy` | Matriks refund |
 | `incentive.target.cascade` (+ `.line`) | Cascade target cabang → individu (persisted model) |
 | `incentive.transaction.refund` | Credit note / refund wizard (persisted model) |
 | `hr.employee` | Field insentif di karyawan |
 | `account.move` / `.line` | Field insentif di invoice |
+| `project.project` | PM, Salesperson 2/3, dan persen komisi masing-masing |
+| `pos.order` | Daftar transaksi insentif per order POS |
 
 ### 3.4 Kompatibilitas Odoo Online (Odoo Studio)
 
@@ -193,6 +213,8 @@ Seluruh arsitektur modul telah disesuaikan agar kompatibel jika ingin dibuat ula
 2. **Pengaman refund ganda:** karena baris refund kini persist, `action_refund()` menulis `refund_move_id` setelah credit note ter-posting dan **menolak** pemanggilan ulang pada baris yang sama — satu baris refund tidak akan pernah membuat dua credit note (§12.2).
 
 Konsekuensi yang perlu diketahui operator: baris wizard yang dibuat tetap tersimpan sebagai riwayat run (cascade) / log refund — tidak pernah dibaca kembali oleh sistem, jadi tidak berbahaya.
+
+Referensi implementasi Odoo Online (Server Action, Automation Rule, daftar field) ada di folder `docs/odoo_online/` — lihat `README.md` dan `FIELDS.md` di folder tersebut. Daftar perbaikan Studio yang masih perlu dikerjakan di database Odoo Online ada di `docs/odoo_online/README_PERBAIKAN.md`.
 
 ---
 
@@ -328,6 +350,8 @@ Tier seed (6 baris):
 
 `payout_rate` adalah computed field = `allocation × rule_id.base_rate`.
 
+Rule kedua yang di-seed: **"Incentive Scheme 1H 2026 (Flat Rate)"** (2026-01-01 s/d 2026-06-30), dengan 2 tier: Tier 0 (< 75%, allocation 0) dan Tier 1 (≥ 75%, allocation 1,0 = 0,75%). Lihat §2.3.
+
 ### 6.4 Refund Policy (`incentive.refund.policy`)
 
 Matriks "Kebijakan Refund (Business Risk)" — 5 baris seed:
@@ -366,6 +390,7 @@ Buka **Employees** → tab **Sales Incentive**. Field tambahan di `hr.employee`:
 | **Effective Target Start** (`incentive_date_start`) | Tanggal target mulai efektif (prorata new hire mid-month) |
 | **Resignation Date** (`incentive_date_end`) | Tanggal resign (kosongkan jika aktif) |
 | **Vacant Position** (`is_vacant_slot`) | Centang untuk slot kosong (placeholder headcount) |
+| **Global Branch Member** (`is_global_branch_member`) | Centang untuk anggota yang ikut branch payout di **semua cabang**, B2B dan B2C (misalnya Pak Kenny). Tidak mendapat target individual dari cabang mana pun; bagiannya dihitung dari `fte_branch` designation-nya (Lead = 1,5). Lihat §10.7 |
 | **Branch Incentive Eligible** | computed dari designation |
 | **Individual Incentive Eligible** | computed dari designation |
 
@@ -592,12 +617,13 @@ Menu **Incentive Periods** → pilih/buat periode → klik **Open**.
 
 Cascade (disarankan) atau manual — lihat [§8](#8-setup-target--cascade).
 
-### Step 3 — Posting invoice
+### Step 3 — Posting invoice & order POS
 
-Tidak ada input manual untuk transaksi. Sistem **membaca invoice customer yang sudah `posted`** otomatis saat Calculate. Pastikan:
+Tidak ada input manual untuk transaksi. Sistem **membaca invoice customer yang sudah `posted`** dan **order POS yang sudah dibayar** otomatis saat Calculate. Pastikan:
 
-- Invoice `out_invoice`/`out_refund` berstatus `posted` dan **sudah lunas** — `incentive_full_payment_date` (Fully Paid On) berada di dalam rentang periode. Basis kas: yang menentukan masuk periode mana adalah **tanggal lunas**, bukan `invoice_date`.
-- **Incentive Salesperson** (`incentive_employee_id`) sudah benar — default mengikuti `invoice_user_id`, bisa di-override.
+- Invoice `out_invoice`/`out_refund` berstatus `posted` dengan `invoice_date` di dalam rentang periode. Invoice yang **belum lunas tetap tercatat** (untuk tier), tetapi baru dibayar di periode saat lunas penuh (`incentive_full_payment_date`).
+- Penerima kredit benar: data **Project** (PM / Salesperson 2 / 3 + persen komisi, §18) untuk invoice dengan project; **Incentive Salesperson** (`incentive_employee_id`, default dari `invoice_user_id`) untuk invoice tanpa project.
+- Order POS memiliki **Cashier** (employee) yang benar (§19).
 - Diskon baris benar — field `Incentive Eligible` di baris invoice otomatis True/False sesuai cap 35%.
 
 ### Step 4 — Calculate
@@ -605,9 +631,18 @@ Tidak ada input manual untuk transaksi. Sistem **membaca invoice customer yang s
 Klik **Calculate** pada periode. Yang terjadi otomatis:
 
 1. Cek **Population Changed** — kalau ada Branch Target yang timnya berubah sejak cascade terakhir, Calculate **ditolak** (lihat §8.7). Jalankan Cascade ulang dulu.
-2. `_generate_for_period` — membuat **transaction** (satu baris per baris invoice) untuk setiap invoice yang **lunas** di bulan ini (`incentive_full_payment_date` dalam rentang periode). `source_period_id` = bulan lunas (basis kas).
-3. `_refresh_payment_stamp` — mengisi tanggal & periode pembayaran untuk invoice yang sudah lunas.
-4. `_compute_for_period` → `_run` — menghitung **payout** per karyawan (SQ1→SQ2→SQ3).
+2. `_generate_for_period` — membuat **transaction** (satu baris per baris invoice per penerima kredit) untuk setiap invoice yang **terbit** di bulan ini, lunas maupun belum, serta untuk order POS yang dibayar di bulan ini. `source_period_id` = bulan terbit invoice.
+3. Cek **kelengkapan data penerima kredit** — jika ada orang (salesperson invoice, PM / Salesperson 2 / 3, atau kasir POS) yang punya penjualan tetapi tidak akan mendapat payout, Calculate **ditolak** dengan pesan:
+
+   ```
+   These people have sales in Sept 26 but would get no payout:
+   - No Sales Branch / Business Type: <nama>
+   - No target in Sept 26: <nama>
+   ```
+
+   Lengkapi **Sales Branch / Business Type / FTE Designation** di Employee, atau jalankan Cascade untuk periode tersebut, lalu Calculate lagi. Selama ditolak, tidak ada data yang berubah.
+4. `_refresh_payment_stamp` — mengisi tanggal & periode pembayaran untuk transaksi yang sudah lunas, termasuk transaksi bulan-bulan sebelumnya yang masih terbuka.
+5. `_compute_for_period` → `_run` — menghitung **payout** per karyawan (SQ1→SQ2→SQ3), lalu stream branch (§10.7), dan menulis **Computation Log** (§21).
 
 Status: Open → **Calculated**.
 
@@ -622,7 +657,7 @@ Status: Open → **Calculated**.
 
 ### Step 6 — Iterasi bulan berikutnya
 
-- Invoice **Juni** yang baru lunas di **Juli** tercatat sebagai transaksi **Juli** (basis kas — `source_period_id` = bulan lunas), sehingga ikut menentukan tier Juli.
+- Invoice **Juni** yang baru lunas di **Juli** tetap tercatat sebagai transaksi **Juni** (menentukan tier Juni). Saat Calculate Juli, invoice tersebut dibayar sebagai **Paid Prior Month** dengan rate tier Juni yang sudah dibekukan. Periode Juli harus sudah dibuat agar invoice yang lunas di Juli mendapat periode pembayaran.
 - Target bulan berikutnya otomatis mendapat **carry-forward** dari shortfall bulan yang sudah di-Lock (lihat §8.4), lewat wizard Cascade.
 - Tidak perlu langkah khusus — cukup Create Next Month → Cascade (Preview → Apply) → Calculate bulan berjalan.
 
@@ -643,7 +678,7 @@ is_mixed = bool(t_bon)   # Scenario 2 jika t_bon > 0
 ### 10.2 SQ1 — Pilih tier dari net sales TANPA filter
 
 ```
-gross   = Σ base_amount transaksi 'invoice' pada source period
+gross   = Σ base_amount transaksi 'invoice' pada source period (termasuk DP)
 returns = |Σ base_amount transaksi 'refund' pada source period|
 net     = gross − returns
 achievement = net / t_inc            (0 jika t_inc = 0)
@@ -651,29 +686,31 @@ tier    = rule._get_tier(achievement, is_mixed)
 payout_rate = tier.payout_rate       (= allocation × base_rate)
 ```
 
-- Tier dipilih dari **net sales seluruh invoice yang lunas di bulan itu** (termasuk diskon >35%). Ini dikonfirmasi dokumen: Sales B May net 86M → 86% → Tier 2, padahal eligible-nya cuma 70M (jika memakai eligible, jadinya Tier 0 — salah).
+- Tier dipilih dari **net sales seluruh invoice yang terbit di bulan itu**, lunas maupun belum (termasuk diskon >35% dan baris DP). Contoh: tim menagih 2M dari target 2M tetapi baru menerima 1M → achievement 100%, payout dari 1M yang sudah lunas. Ini juga dikonfirmasi dokumen: Sales B May net 86M → 86% → Tier 2, padahal eligible-nya cuma 70M (jika memakai eligible, jadinya Tier 0 — salah).
 - Tier di-**freeze** ke baris transaksi via `_stamp_tier` (lihat 10.5).
 
 ### 10.3 SQ2 — Eligible base + split bucket
 
 ```
-eligible_tx = transaksi invoice dengan is_discount_eligible = True
-excluded    = Σ base_amount invoice dengan is_discount_eligible = False
+eligible_tx = transaksi invoice dengan is_discount_eligible = True dan bukan DP
+excluded    = Σ base_amount invoice dengan is_discount_eligible = False (bukan DP)
 eligible_base = Σ base_amount eligible_tx
 
 jika mixed:
     elig_inc = min(eligible_base, t_inc)
-    elig_bon = min(max(eligible_base − t_inc, 0), t_bon)
+    elig_bon = max(eligible_base − t_inc, 0)     # tidak di-cap di t_bon
 jika tidak:
     elig_inc = eligible_base
     elig_bon = 0
 ```
 
-Split ke per baris (baris terbesar dulu, **satu baris boleh terbelah** di batas bucket):
+> Bucket bonus sengaja **tidak di-cap** di target bonus. Versi sebelumnya membatasi bonus di `t_bon`, sehingga kelebihan penjualan hangus dan salesperson yang punya target bonus justru bisa menerima lebih kecil daripada salesperson dengan angka penjualan sama tanpa target bonus.
+
+Split ke per baris (**urut kronologis**, tanggal invoice lalu baris invoice/POS; **satu baris boleh terbelah** di batas bucket):
 
 ```
 remaining_inc = elig_inc ; remaining_bon = elig_bon
-untuk tiap baris (urut base_amount desc):
+untuk tiap baris (urut invoice_date, lalu baris sumber):
     inc = min(base_amount, remaining_inc) ; remaining_inc -= inc
     bon = min(base_amount − inc, remaining_bon) ; remaining_bon -= bon
     baris.incentive_alloc = inc ; baris.bonus_alloc = bon
@@ -681,24 +718,31 @@ untuk tiap baris (urut base_amount desc):
 
 Ini menjawab bug yang pernah terjadi: sebuah baris 100 ribu yang melewati sisa bucket incentive **harus terbelah** — sebagian ke incentive, sisanya ke bonus — **bukan** dibuang ke excluded.
 
+Urutan kronologis menggantikan urutan "nominal terbesar dulu". Dengan urutan nominal, invoice baru yang lebih besar bisa merebut bucket incentive dan mendorong invoice lama yang sudah dihitung ke bucket bonus secara retroaktif.
+
 ### 10.4 SQ3 — Hanya yang lunas
 
 ```
-paid_current_tx = eligible_tx yang is_payment_eligible dan payment_period == periode ini
-paid_current = Σ _net_alloc()[0]  (porsi incentive)
-paid_bonus   = Σ _net_alloc()[1]  (porsi bonus)
+(a) paid_current_tx = eligible_tx yang is_payment_eligible dan payment_period == periode ini
+    paid_current = Σ _net_alloc()[0]  (porsi incentive)
+    paid_bonus   = Σ _net_alloc()[1]  (porsi bonus)
+
+(b) prior_tx = transaksi invoice periode SEBELUMNYA yang lunas di periode ini
+               (diskon eligible, bukan DP, incentive_alloc > 0, belum reversed)
+    paid_prior = Σ _net_alloc()[0]
 ```
 
 `_net_alloc()` = (incentive, bonus) porsi net base setelah net-off retur, diproporsikan dari split gross.
 
-> Dengan basis kas, semua transaksi tertangkap dari invoice yang sudah lunas, sehingga `payment_period` selalu sama dengan periode berjalan dan tidak ada baris "prior period" (`paid_prior = 0`).
+Saat SQ1 selesai, tier periode itu **dibekukan** ke setiap baris transaksinya (`_stamp_tier` → `tier_payout_rate`). Invoice yang baru lunas di bulan berikutnya membaca rate beku ini, bukan rate bulan pelunasan. Konsekuensinya: invoice dari bulan yang mendapat **Tier 0** tidak dibayar walaupun kemudian lunas.
 
 ### 10.5 Payout
 
 ```
-payout_current = paid_current × rate                      (rate tier periode ini)
+payout_current = paid_current × rate                       (rate tier periode ini)
+payout_prior   = Σ (_net_alloc()[0] × tier_payout_rate)    (rate beku bulan asal per baris)
 payout_bonus   = paid_bonus × rule.bonus_rate
-total_payout   = payout_current + payout_bonus
+total_payout   = payout_current + payout_prior + payout_bonus + branch_payout
 ```
 
 ### 10.6 Aturan "fully paid"
@@ -710,19 +754,22 @@ total_payout   = payout_current + payout_bonus
 Stream branch dihitung terpisah di `_compute_branch_for_period`, untuk tiap cabang × business type yang punya `incentive.branch.target` pada periode itu:
 
 ```
-net_branch  = Σ gross invoice − |Σ refund| (seluruh transaksi cabang pada periode)
-achievement = net_branch / branch_target
+net_branch  = Σ gross invoice − |Σ refund| (seluruh transaksi cabang pada source period)
+achievement = net_branch / branch_target (amount_total, termasuk carry-forward)
 tier        = rule._get_tier(achievement)          # branch TIDAK di-cap tier 5
 rate        = tier.payout_rate                     (= allocation × base_rate 0,75%)
-paid        = Σ _net_base() invoice eligible (diskon ≤35% & lunas)
-pool        = paid × rate
 
-bobot per orang = fte_branch × prorata
-share          = bobot / Σ bobot
-branch_payout  = pool × share
+tim         = karyawan cabang × business type yang branch-eligible dan aktif
+              pada tanggal awal periode, ditambah Global Branch Member
+pool        = Σ payout_current seluruh tim          (payout individu bulan berjalan)
+total_fte   = Σ fte_branch tim
+
+branch_payout[emp] = pool × (fte_branch emp / total_fte) × rate
 ```
 
-Hasilnya ditulis ke field `branch_*` di `incentive.payout` dan dijumlah ke `total_payout` bersama `payout_current` + `payout_bonus`. Stream ini juga memberi payout kepada **Support** (yang tidak punya target individual) karena bobotnya memakai `fte_branch`.
+Hasilnya ditulis ke field `branch_*` di `incentive.payout` dan dijumlah ke `total_payout`. Stream ini juga memberi payout kepada **Support** (yang tidak punya target individual) karena bobotnya memakai `fte_branch`. Karyawan yang sudah resign sebelum tanggal awal periode tidak lagi dihitung dalam tim, sehingga FTE-nya hilang dari penyebut.
+
+**Global Branch Member** (misalnya Pak Kenny, §7) dimasukkan ke tim **setiap** cabang dan business type dengan bobot `fte_branch` designation-nya. Branch payout dari semua cabang dijumlahkan ke satu baris payout miliknya.
 
 ---
 
@@ -754,18 +801,25 @@ Hasilnya ditulis ke field `branch_*` di `incentive.payout` dan dijumlah ke `tota
 1. SQ1: 110M / 100M = 110% → **Tier 5** (0,7875%).
 2. Payout = 105.000.000 × 0,7875% = **826.875**.
 
-### 11.3 Basis kas — invoice terbit Juni, lunas Juli
+### 11.3 Paid Prior Month — invoice terbit Juni, lunas Juli
 
-| Item | Nilai |
+Juni: achievement 95% → **Tier 3 (0,675%)**. Salah satu invoice Juni senilai 10.000.000 baru lunas di Juli. Rate 0,675% sudah dibekukan ke baris transaksinya saat Calculate Juni.
+
+| Item Juli | Nilai |
 |---|---|
 | Target incentive | 100.000.000 |
-| Net Juli (termasuk invoice terbit Juni yang lunas Juli) | 100.000.000 → Tier 4 (0,75%) |
+| Net sales (invoice terbit Juli saja) | 100.000.000 → Tier 4 (0,75%) |
 | Eligible | 90.000.000 |
-| Paid current | 80.000.000 (di dalamnya 10.000.000 berasal dari invoice terbit Juni) |
+| Paid current (invoice Juli yang lunas Juli) | 70.000.000 |
+| Paid prior (invoice Juni yang lunas Juli) | 10.000.000 |
 
-1. Invoice terbit Juni yang baru lunas di Juli **dipindah** ke transaksi Juli (basis kas), sehingga ikut menentukan tier dan payout Juli.
-2. SQ1: 100M / 100M = 100% → Tier 4 (0,75%).
-3. `Payout` = 80.000.000 × 0,75% = **600.000**.
+1. Invoice Juni **tetap** milik periode Juni untuk tier. Invoice tersebut tidak ikut net sales Juli.
+2. SQ1 Juli: 100M / 100M = 100% → Tier 4 (0,75%).
+3. `Payout Current` = 70.000.000 × 0,75% = **525.000**.
+4. `Payout Prior` = 10.000.000 × 0,675% (rate beku Juni) = **67.500**.
+5. **Total = 592.500**.
+
+Sisa eligible Juli yang belum lunas (20.000.000) akan dibayar dengan rate 0,75% di bulan pelunasannya.
 
 ### 11.4 Mixed — Sales B, Juli (bonus tercapai)
 
@@ -778,7 +832,7 @@ Hasilnya ditulis ke field `branch_*` di `incentive.payout` dan dijumlah ke `tota
 | Paid current | 145.000.000 (seluruh eligible lunas) |
 
 1. SQ1: 145M / 100M = 145% → Tier 5 → **di-cap ke Tier 4** (mixed) = 0,75%.
-2. SQ2 split: incentive = min(145M, 100M) = **100M**; bonus = min(145M − 100M, 50M) = **45M**.
+2. SQ2 split: incentive = min(145M, 100M) = **100M**; bonus = 145M − 100M = **45M** (tidak di-cap di target bonus; jika eligible 160M, bonus tetap dibayar 60M).
 3. `Payout Current` = 100M × 0,75% = **750.000**.
 4. `Bonus` = 45M × 1% = **450.000**.
 5. **Total = 1.200.000**
@@ -913,6 +967,7 @@ Semua perpindahan tercatat di **Target Movements** (From/To, jumlah, alasan, tan
 | Operations → Incentive Periods | `incentive.period` | Periode + state machine |
 | Operations → Targets | `incentive.target` | Target per karyawan (2 bucket) |
 | Operations → Cascade Branch Target | `incentive.target.cascade` | Wizard cascade RF → individu |
+| Operations → Branch Targets | `incentive.branch.target` | Target cabang per periode + Calculate per cabang |
 | Operations → Target Movements | `incentive.target.movement` | Audit trail perpindahan target |
 | Reporting → Payouts | `incentive.payout` | Semua payout |
 | Reporting → Transactions | `incentive.transaction` | Transaksi per baris invoice |
@@ -927,11 +982,11 @@ Semua perpindahan tercatat di **Target Movements** (From/To, jumlah, alasan, tan
 
 **Kolom preview `incentive.target.cascade.line`:** employee_id, designation_id, fte, proration, **base_amount** (Base Incentive), **carry_forward_amount** (Carry-Forward), **incentive_amount** (Total Incentive — computed base + carry), bonus_amount.
 
-**Field penting di `incentive.transaction` (list view):** Move, Employee, Branch, Product, Invoice Date, Source Period, Payment Period, Discount, is_discount_eligible, is_payment_eligible, bucket, incentive_alloc, bonus_alloc, base_amount, tier_id, tier_payout_rate, payout_amount, state.
+**Field penting di `incentive.transaction` (list view):** Move, POS Order, Source Type (invoice/POS), Employee, Branch, Product, Project, Credit Role (`split_role`), Share (`split_share`), Invoice Date, Source Period, Payment Period, Discount, is_downpayment, is_discount_eligible, is_payment_eligible, bucket, incentive_alloc, bonus_alloc, base_amount, tier_id, tier_payout_rate, payout_amount, state.
 
-**Field penting di `incentive.payout`:** target_incentive, target_bonus, target_total, is_mixed, gross_sales, sales_return, net_sales, achievement_pct, tier_id, payout_rate, eligible_incentive, eligible_bonus, excluded_discount, paid_current_month, paid_prior_month, paid_bonus, payout_current, payout_prior, payout_bonus, branch_target, branch_net_sales, branch_achievement_pct, branch_tier_id, branch_payout_rate, branch_pool, branch_fte, branch_fte_share, branch_payout, total_payout, is_eligible, is_frozen.
+**Field penting di `incentive.payout`:** target_incentive, target_bonus, target_total, is_mixed, gross_sales, sales_return, net_sales, achievement_pct, tier_id, payout_rate, eligible_incentive, eligible_bonus, excluded_discount, paid_current_month, paid_prior_month, paid_bonus, payout_current, payout_prior, payout_bonus, branch_target, branch_net_sales, branch_achievement_pct, branch_tier_id, branch_payout_rate, branch_pool, branch_fte, branch_fte_share, branch_payout, total_payout, is_eligible, is_frozen, computation_log.
 
-> **Catatan basis kas:** pada `incentive.transaction`, `Source Period` = `Payment Period` = bulan lunas. Field `paid_prior_month` dan `payout_prior` pada `incentive.payout` tetap ada untuk kompatibilitas tapi selalu 0.
+> Pada `incentive.transaction`, `Source Period` = bulan terbit invoice (menentukan tier), `Payment Period` = bulan lunas penuh (menentukan kapan dibayar). Jika keduanya berbeda, baris tersebut dibayar sebagai `paid_prior_month` / `payout_prior` di periode pembayarannya.
 
 ---
 
@@ -941,9 +996,13 @@ Semua perpindahan tercatat di **Target Movements** (From/To, jumlah, alasan, tan
    - (a) tier 0 (achievement < 75%),
    - (b) invoice belum lunas,
    - (c) diskon baris > 35%,
-   - (d) karyawan belum punya baris Target di periode itu.
+   - (d) karyawan belum punya baris Target di periode itu,
+   - (e) penjualan berupa baris DP (hanya untuk tier, §20),
+   - (f) kredit penjualan masuk ke orang lain karena pembagian project (§18).
 
-2. **Partial payment tidak eligible.** Hanya invoice berstatus `paid` yang masuk SQ3. `partial`, `in_payment` (residual 0 tapi belum final), `not_paid`, `reversed`, `blocked` dikecualikan.
+   Buka tab **Computation Log** di payout untuk melihat dokumen mana yang masuk dan dikeluarkan (§21).
+
+2. **Partial payment tidak eligible.** Hanya invoice berstatus `paid` atau `in_payment` (residual nol) yang masuk SQ3. `partial`, `not_paid`, `reversed`, `blocked` dikecualikan (§10.6). Invoice partial tetap ikut menentukan tier bulan terbitnya.
 
 3. **Credit note sebagian sudah di-net-off** (lihat §12.3). Batasan retroaktif & credit note manual.
 
@@ -955,7 +1014,7 @@ Semua perpindahan tercatat di **Target Movements** (From/To, jumlah, alasan, tan
 
 7. **Tombol Open error?** Belum memilih Rule Version.
 
-8. **Tombol Calculate error?** Tiga sebab: periode masih Draft (harus Open dulu), sudah Locked, atau ada Branch Target ber-banner **Population Changed** — jalankan wizard Cascade ulang untuk cabang tersebut (§8.7).
+8. **Tombol Calculate error?** Empat sebab: periode masih Draft (harus Open dulu), sudah Locked, ada Branch Target ber-banner **Population Changed** — jalankan wizard Cascade ulang untuk cabang tersebut (§8.7), atau ada penerima kredit tanpa **Sales Branch / Business Type** atau tanpa **target** di periode itu (§9 Step 4).
 
 9. **Kenapa tier bisa beda antara net dan eligible?** Memang begitu — tier memakai net (SQ1), bukan eligible (SQ2). Lihat §10.2.
 
@@ -966,6 +1025,14 @@ Semua perpindahan tercatat di **Target Movements** (From/To, jumlah, alasan, tan
 12. **Target semua orang naik padahal tidak ada kesepakatan?** Kemungkinan `Ideal Team Size` di cabang itu belum diisi, sehingga porsi kursi yang kosong terbagi ke tim yang tersisa (§8.5).
 
 13. **Target seseorang di Preview kelihatan kebesaran?** Lihat kolom **Base Incentive** vs **Carry-Forward**. Kalau selisihnya ada di Carry-Forward, itu tunggakan shortfall bulan-bulan locked sebelumnya — bukan salah hitung (§8.4).
+
+14. **Saya yang membuat Sales Order, tetapi komisinya masuk ke orang lain?** Sales Order tersebut memakai Project. Kredit mengikuti PM / Salesperson 2 / 3 di project, bukan salesperson di Sales Order (§18.3).
+
+15. **Satu invoice muncul beberapa kali di Transactions?** Normal untuk invoice project: satu baris transaksi per penerima kredit (§18).
+
+16. **Penjualan POS tidak masuk insentif?** Periksa apakah **Log in with Employees** aktif di POS, order memiliki **Cashier**, dan kasir tersebut memiliki **Sales Branch** (§19.2).
+
+17. **Invoice lama lunas bulan ini tetapi tidak dibayar?** Kemungkinan bulan asal invoice mendapat **Tier 0**, baris tersebut DP, atau diskonnya di atas batas. Computation Log bagian [6] menampilkan alasannya (§21).
 
 ---
 
@@ -980,8 +1047,10 @@ Semua perpindahan tercatat di **Target Movements** (From/To, jumlah, alasan, tan
 7. **Refund auto-reversal penuh belum otomatis** — 3 kasus UAT refund masih "NEED UPDATE". Yang tersedia: matriks policy + reversal manual + net-off credit note otomatis.
 8. **Kursi kosong selalu dihitung 1,0 FTE.** Kalau yang kosong posisi Lead (1,5), pakai record `Vacant Position` berdesignation Lead (§8.5).
 9. **Penyambungan serah-terima hanya antar designation yang sama.** Leaver Lead yang diganti Team Member dihitung dua kontributor terpisah, bukan satu kursi (§8.6.1) — bonus jadi lebih besar dari seharusnya kalau kombinasi itu dipakai. Perlu pemodelan kursi lintas designation kalau mau didukung.
-9. **Deteksi Population Changed melewatkan hire posisi Support** pada cascade scope Branch — baris target tidak menyimpan scope yang dipakai saat cascade (§8.7).
-10. **`needs_recascade` tidak stored** — tidak bisa dipakai sebagai filter atau group-by di search view; tersedia sebagai kolom list + banner form.
+10. **Deteksi Population Changed melewatkan hire posisi Support** pada cascade scope Branch — baris target tidak menyimpan scope yang dipakai saat cascade (§8.7).
+11. **`needs_recascade` tidak stored** — tidak bisa dipakai sebagai filter atau group-by di search view; tersedia sebagai kolom list + banner form.
+12. **Computation Log rinci per dokumen** (§21) saat ini tersedia di implementasi **Odoo Online** (`docs/odoo_online/actions/sa_engine_calculate.py`). Modul Odoo 19 masih menulis log ringkas (SQ1/SQ2/SQ3).
+13. **Analytic tag jurnal POS** (§19.6) hanya tersedia sebagai Automation Rule Odoo Online, dengan ID field/akun yang dikonfirmasi untuk database klien. Periksa ulang sebelum dipakai di database lain.
 
 ---
 
@@ -995,10 +1064,159 @@ Semua perpindahan tercatat di **Target Movements** (From/To, jumlah, alasan, tan
 - [ ] Periode bulan pertama dibuat + Open.
 - [ ] Target di-cascade (atau diinput) sebelum Calculate.
 - [ ] Invoice di-posting, `incentive_employee_id` benar.
+- [ ] Project yang dipakai Sales Order sudah berisi PM / Salesperson 2 / 3 dan persen komisi (§18).
+- [ ] POS memakai **Log in with Employees**, setiap kasir sales memiliki PIN/Badge dan Sales Branch (§19.1).
+- [ ] (Odoo Online) Automation Rule **VIF: POS Journal Analytic Tags** aktif dan ID analytic sudah dicek di database tujuan (§19.6).
+- [ ] Karyawan seperti Pak Kenny ditandai **Global Branch Member** dengan designation yang benar (§7).
 - [ ] Sebelum Calculate: pastikan tidak ada Branch Target ber-kolom **Re-cascade** menyala (§8.7).
 - [ ] Calculate → review payout → Approve → Lock.
-- [ ] Bulan berikutnya: Create Next Month → cascade (Preview → Apply, carry-forward otomatis masuk) → Calculate (otomatis ambil invoice yang lunas bulan ini).
+- [ ] Bulan berikutnya: Create Next Month → cascade (Preview → Apply, carry-forward otomatis masuk) → Calculate (otomatis mengambil invoice yang terbit bulan ini, order POS bulan ini, dan invoice bulan sebelumnya yang lunas bulan ini).
 - [ ] (Jika go-live penuh) Putuskan scope stream branch incentive 0,75% (lihat §16.1).
+
+---
+
+## 18. Pembagian Kredit per Project
+
+Kredit penjualan **tidak otomatis 100% ke salesperson di Sales Order**. Jika Sales Order memiliki **Project**, kredit setiap baris invoice dibagi ke orang-orang di project sesuai persen komisinya (`account.move.line._incentive_split`). Pembagian ini berlaku untuk **achievement/tier** sekaligus **payout**.
+
+### 18.1 Data di Project
+
+| Field | Keterangan |
+|---|---|
+| **Project Manager** | PM project |
+| **Salesperson 2** / **Salesperson 3** | Sales tambahan yang ikut di project |
+| **Komisi PM / Salesperson 2 / Salesperson 3** | Persen bagian masing-masing; total sebaiknya 100% |
+
+Salesperson 2 / 3 hanya menerima bagiannya jika sudah memiliki **Sales Branch + Business Type** dan **target** di periode invoice. Jika belum, bagiannya dialihkan ke PM.
+
+### 18.2 Contoh
+
+Project dengan PM 20%, Salesperson 2 40%, Salesperson 3 40%; invoice 100.000.000 → kredit 20M / 40M / 40M. Jika Salesperson 3 belum punya Sales Branch, PM menerima 60M, Salesperson 2 40M, Salesperson 3 0.
+
+### 18.3 Aturan khusus
+
+| Kondisi | Hasil |
+|---|---|
+| Salesperson di Sales Order tidak tercantum di project | Tidak mendapat kredit; kredit mengikuti orang di project |
+| Semua persen kosong / 0 | PM 100% |
+| Persen diisi tetapi orangnya kosong | Porsi dialihkan ke PM |
+| Total persen < 100% | Sisa dialihkan ke PM |
+| Total persen > 100% | Dibagi ulang proporsional hingga 100% |
+| Satu orang mengisi dua posisi | Persen dijumlahkan |
+| Orang di project tidak punya data Employee | Porsi dialihkan ke PM |
+| PM kosong dan tidak ada orang lain yang memenuhi syarat | Kembali ke **Incentive Salesperson** invoice 100% |
+| PM kosong, Salesperson 2 memenuhi syarat | Persen yang biasanya dialihkan ke PM dibagi ulang ke orang yang ada |
+
+PM selalu menerima bagiannya, walaupun belum memiliki branch atau target. Namun Calculate akan ditolak sampai data PM dilengkapi (§9 Step 4).
+
+### 18.4 Perubahan data project, refund, dan pengecekan
+
+- Setelah PM, Salesperson 2/3, atau persen diubah, jalankan **Calculate** ulang pada periode yang belum di-Lock. Kredit orang yang sudah tidak ada di project dihapus. Periode Locked tidak berubah.
+- Credit note dari invoice project dibagi dengan persen yang sama, memakai pengecekan branch/target **periode invoice asal**. Nominal pada wizard **Create Credit Note / Refund** adalah nilai untuk seluruh baris invoice; sistem membaginya otomatis.
+- Pengecekan: **Reporting → Transactions**, Group By **Project**, perhatikan kolom **Credit Role**, **Share**, dan **Line Amount**. Satu baris invoice muncul sekali per penerima kredit.
+
+---
+
+## 19. Transaksi POS & Analytic Tags Jurnal POS
+
+Order **Point of Sale** ikut dihitung. Penerima kredit adalah **Cashier (Employee)** yang sedang login di layar POS saat order dibuat, bukan yang membuka sesi.
+
+### 19.1 Setup (sekali, oleh Admin)
+
+1. **Point of Sale → Configuration → Settings** → pilih POS → **PoS Interface** → centang **Log in with Employees** → Save.
+2. Tambahkan karyawan sales yang boleh memakai POS tersebut.
+3. Di **Employees**: isi **PIN Code** / **Badge ID** (tab HR Settings), serta **Sales Branch**, **Business Type**, dan **FTE Designation** (tab Sales Incentive).
+
+### 19.2 Syarat order POS masuk perhitungan
+
+- Status **Paid**, **Posted**, atau **Invoiced**, dengan tanggal order di dalam periode.
+- Memiliki **Cashier** yang sudah memiliki **Sales Branch**.
+- Company sama dengan periode insentif.
+
+### 19.3 Perbedaan dengan invoice
+
+| Hal | Invoice | POS |
+|---|---|---|
+| Penerima kredit | Project split / Incentive Salesperson | Cashier yang login |
+| Dianggap lunas | Saat invoice lunas penuh | Langsung (dibayar di kasir) |
+| Periode payout | Periode pelunasan | Periode tanggal order |
+| Partial payment / DP | Ada | Tidak ada |
+| Batas diskon 35% per baris | Berlaku | Berlaku |
+
+Order POS yang dibuatkan invoice dihitung **lewat invoice-nya**, bukan sebagai transaksi POS, sehingga tidak terhitung dua kali. Incentive Salesperson invoice tersebut otomatis diisi Cashier order POS.
+
+### 19.4 Retur di POS
+
+Retur mengurangi net sales kasir yang memproses retur pada periode retur. Jika retur dibuat dari order asal (tombol **Refund** di POS), retur juga mengurangi dasar payout order asal; field **Reversal Of** pada baris retur menunjukkan transaksi asalnya. Proses retur sebaiknya dilakukan oleh kasir yang sama dengan penjualan awal.
+
+### 19.5 Pengecekan dan koreksi kasir
+
+- **Reporting → Transactions**, filter **From POS** / **From Invoice**, Group By **Source Type**; kolom **POS Order** menunjukkan order asal.
+- Di form order POS, daftar transaksi insentif tampil di bawah kolom **Cashier**.
+- Salah kasir: perbaiki **Cashier** di order POS sebelum periode di-Lock, lalu Calculate ulang. Transaksi dipindahkan ke kasir yang benar.
+
+### 19.6 Analytic Tags pada jurnal POS (Odoo Online)
+
+Automation Rule ini **bukan bagian dari mesin insentif**. Fungsinya menutup selisih berikut: jurnal dari Sales Order diberi Analytic Distribution secara manual, sedangkan jurnal dari POS tidak pernah mendapat Analytic Distribution.
+
+| Item | Nilai |
+|---|---|
+| Nama rule | `VIF: POS Journal Analytic Tags` |
+| Model / Trigger | Point of Sale Orders, *On create and edit* saat field **Invoice** (`account_move`) berubah |
+| Kode | `docs/odoo_online/automations/au_pos_journal_analytic.py` |
+
+Setiap baris jurnal invoice POS yang **belum** memiliki analytic distribution diisi tiga tag:
+
+| Analytic Plan | Nilai |
+|---|---|
+| Project | `N/A` (tetap) |
+| Branch | Sama dengan field **Branch** (`x_studio_branch`) di invoice |
+| Business Type | `B2C` (tetap; penjualan POS selalu retail) |
+
+Perilaku: baris yang sudah ditandai manual tidak ditimpa; menjalankan ulang tidak menghasilkan perubahan (idempotent); invoice tanpa Branch dilewati tanpa error. Diuji 2 Oktober 2026 pada salinan database klien (`vaniaeut_online`). ID akun analytic yang tercantum di header file berlaku untuk database tersebut; periksa ulang sebelum dipasang di database lain.
+
+---
+
+## 20. Down Payment
+
+Baris **Down Payment** (`is_downpayment`) diperlakukan khusus:
+
+1. **Ikut SQ1:** DP menambah achievement bulan invoice DP diterbitkan, sehingga dapat membantu mencapai tier bulan itu.
+2. **Tidak ikut SQ2/SQ3:** DP tidak pernah dibayar sendiri, juga tidak di bulan lain sebagai Paid Prior.
+3. **Payout dari final invoice:** nilai order dibayar penuh dari baris produk final invoice saat lunas. Baris pengurang DP di final invoice (bernilai negatif) mengembalikan achievement agar tidak terhitung dua kali.
+
+Contoh: order 100M, DP 50M di Januari, final invoice di Februari.
+
+| | Januari | Februari |
+|---|---|---|
+| Achievement | +50M (DP) | +100M produk − 50M pengurang DP = +50M |
+| Dasar payout | 0 | 100M (saat final invoice lunas) |
+
+---
+
+## 21. Membaca Computation Log
+
+Tab **Computation Log** di form Payout menyimpan jejak perhitungan setiap angka beserta dokumen sumbernya (nomor invoice / order POS, tanggal, peran dan persen kredit, project, nilai). Format angka memakai notasi Indonesia (`1.234.567,80`).
+
+> Format rinci di bawah ini dihasilkan oleh Server Action Odoo Online (`docs/odoo_online/actions/sa_engine_calculate.py`). Modul Odoo 19 menulis versi ringkas (`SQ1 … / SQ2 … / SQ3 …`) dengan angka yang sama.
+
+| Bagian | Isi | Pertanyaan yang dijawab |
+|---|---|---|
+| **TARGET** | Target Incentive dan Target Bonus; keterangan skema mixed jika ada target bonus | Berapa target yang dipakai? |
+| **[1] GROSS SALES** | Semua baris invoice periode ini atas nama karyawan (lunas maupun belum, termasuk DP dan diskon besar), satu baris per dokumen | Dokumen apa saja yang dihitung? |
+| **[2] SALES RETURN** | Credit note / retur periode ini | Apa yang mengurangi penjualan? |
+| **[3] NET SALES & ACHIEVEMENT** | `Gross − Return`, `Net / Target`, tier dan rate. Jika tier dibatasi skema mixed, tertulis tier seharusnya | Kenapa saya di tier ini? |
+| **[4] ELIGIBLE** | Baris yang dikeluarkan (diskon di atas batas, baris DP), lalu Eligible Incentive dan Eligible Bonus | Apa yang tidak boleh dibayar? |
+| **[5] PAID CURRENT MONTH** | Baris eligible yang lunas penuh bulan ini; daftar yang **belum lunas** beserta periode pembayarannya nanti, atau peringatan jika periode bulan pelunasan belum dibuat. Pada Tier 0 tertulis bahwa baris tersebut tidak akan dibayar walaupun lunas | Kenapa invoice ini belum dibayar? |
+| **[6] PAID PRIOR MONTH** | Invoice bulan sebelumnya yang lunas bulan ini, dengan rate beku bulan asal; serta yang lunas tetapi **tidak** dibayar beserta alasannya (DP, diskon, atau Tier 0 di bulan asal) | Kenapa invoice lama dibayar dengan rate berbeda? |
+| **[7] PAYOUT INDIVIDU** | Rumus Incentive Payout Current, Previous Month, dan Bonus Payout | Bagaimana angka akhir dihitung? |
+| **[8] BRANCH PAYOUT** | Per cabang/business type: target cabang, net sales per anggota, achievement dan tier cabang, anggota tim beserta FTE dan Payout Current, pool, total FTE, dan rumus `Pool × FTE / Total FTE × rate` | Dari mana Branch Payout saya? |
+
+Catatan:
+
+- Karyawan tanpa target individual (misalnya Support) hanya memiliki bagian [8], diawali keterangan *"Tidak ada target individual … hanya branch payout"*.
+- **Global Branch Member** memiliki satu bagian [8] untuk **setiap** cabang, ditutup dengan *Total Branch Payout semua cabang*.
+- Tombol **Recompute** pada satu payout tidak menghitung ulang Branch Payout; log mencatat nilai yang dipertahankan.
 
 ---
 
